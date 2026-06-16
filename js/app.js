@@ -130,7 +130,16 @@
     }));
     $('sendBtn').addEventListener('click', sendMessage);
     $('msgInput').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendMessage();
+      if (e.key !== 'Enter') return;
+      if (e.ctrlKey || e.metaKey) {            // Ctrl/Cmd+Enter → new line
+        e.preventDefault();
+        const ta = e.target, s = ta.selectionStart, en = ta.selectionEnd;
+        ta.value = ta.value.slice(0, s) + '\n' + ta.value.slice(en);
+        ta.selectionStart = ta.selectionEnd = s + 1;
+      } else if (!e.shiftKey) {                 // Enter → send (Shift+Enter keeps default newline)
+        e.preventDefault();
+        sendMessage();
+      }
     });
 
     // intro
