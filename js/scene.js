@@ -220,29 +220,33 @@
     return new THREE.Vector3(r * c * Math.cos(lo), r * Math.sin(la), -r * c * Math.sin(lo));
   }
 
-  /* Deep Space Network — real-lat/lon pins ON Earth's surface, parented to the
-     Earth mesh so they rotate with the globe (Goldstone over California, Madrid
-     over Spain, Canberra over Australia). The one facing Mars lights up. */
+  // A little parabolic dish antenna on a post (built pointing +Y).
+  function makeDish() {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xb9c2d2, emissive: 0x3a4658, emissiveIntensity: 0.55, metalness: 0.55, roughness: 0.5, side: THREE.DoubleSide });
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.1, 8), mat); post.position.y = 0.05;
+    const bowl = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.09, 18, 1, true), mat); bowl.position.y = 0.14; bowl.rotation.x = Math.PI; // open face outward
+    const feed = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), mat); feed.position.y = 0.17;
+    g.add(post, bowl, feed);
+    const glow = radialSprite(COL.light, 1.2, 0); glow.position.y = 0.14; g.add(glow);
+    g.userData.mat = mat; g.userData.glow = glow;
+    return g;
+  }
+
+  /* Deep Space Network — dish antennas planted ON Earth's surface at real
+     lat/lon, parented to the Earth mesh so they rotate with the globe
+     (Goldstone→California, Madrid→Spain, Canberra→Australia). The dish facing
+     Mars lights up and hands off as Earth turns. */
   function buildDSN() {
     const earth = bodies.Earth.mesh, rE = bodyR('Earth');
     A.DSN.forEach((s, i) => {
       const dir = latLonToVec3(s.lat, s.lon, 1).normalize();
-      const stalk = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints([dir.clone().multiplyScalar(rE), dir.clone().multiplyScalar(rE + 0.2)]),
-        new THREE.LineBasicMaterial({ color: 0x8aa0c0, transparent: true, opacity: 0.55 })
-      );
-      stalk.raycast = () => {};
-      earth.add(stalk);
-      const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.08, 12, 12),
-        new THREE.MeshBasicMaterial({ color: 0x8aa0c0 })
-      );
-      head.position.copy(dir.clone().multiplyScalar(rE + 0.2));
-      head.userData.hoverKey = 'DSN:' + i;
-      head.userData.stalk = stalk;
-      head.add(radialSprite(COL.light, 1.3, 0));   // glow toggled when active
-      earth.add(head);
-      dsnDots.push(head);
+      const pin = makeDish();
+      pin.position.copy(dir.clone().multiplyScalar(rE * 0.99));              // base sits on the surface
+      pin.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);   // stand it upright, dish to the sky
+      pin.userData.hoverKey = 'DSN:' + i;
+      earth.add(pin);
+      dsnDots.push(pin);
     });
   }
 
@@ -411,12 +415,10 @@
     });
     dsnDots.forEach((d, i) => {
       const on = i === best;
-      d.material.color.set(on ? COL.light : 0x8aa0c0);
-      d.scale.setScalar(on ? 1.7 : 1);
-      d.children[0].material.opacity = on ? 0.95 : 0;
-      const st = d.userData.stalk;
-      st.material.color.set(on ? COL.light : 0x8aa0c0);
-      st.material.opacity = on ? 0.95 : 0.5;
+      d.userData.mat.color.set(on ? COL.light : 0xb9c2d2);
+      d.userData.mat.emissive.set(on ? 0x2a6a7a : 0x3a4658);
+      d.userData.glow.material.opacity = on ? 0.95 : 0;
+      d.scale.setScalar(on ? 1.3 : 1);
     });
     if (best !== _activeDSN) { _activeDSN = best; if (Scene.onDSNChange) Scene.onDSNChange(best); }
   }
@@ -490,6 +492,10 @@
     const dist = e.distanceTo(m) * 1.6 + 50;
     animateCamera(new THREE.Vector3(mid.x, dist * 0.7, mid.z + dist), mid);
   }
+  function focusEarth() {
+    const e = bodies.Earth.mesh.position, off = bodyR('Earth') * 7 + 3;
+    animateCamera(new THREE.Vector3(e.x + off, e.y + off * 0.45, e.z + off), e.clone());
+  }
   let camAnim = null;
   function animateCamera(toPos, toTarget) {
     camAnim = { fromPos: camera.position.clone(), toPos, fromT: controls.target.clone(), toTarget, t0: clock.elapsedTime, dur: 1.1 };
@@ -543,7 +549,7 @@
     init, update,
     beginRocket, setRocket, endRocket,
     addPhoton, setPhoton, removePhoton,
-    resetView, focusEarthMars,
+    resetView, focusEarthMars, focusEarth,
     showAim(v){ aimLine.visible = v; ghostMars.visible = v; ghostLabel.visible = v; },
     onDSNChange: null,
     onHover: null,
