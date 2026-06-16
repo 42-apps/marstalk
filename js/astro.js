@@ -55,6 +55,7 @@
 
   // Hover facts for the Sun + projected SpaceX Starship (Mars) specs.
   const SUN_FACT = { name: 'The Sun', radiusKm: 696340, blurb: 'A G-type star with ~99.86% of the solar system’s mass. Its light reaches Earth in ~8 min 20 s.' };
+  const MOON_FACT = { name: 'The Moon', radiusKm: 1737, blurb: 'Earth’s only natural satellite — about 384,400 km away (~1.3 light-seconds), and the farthest humans have ever travelled.' };
   const STARSHIP = {
     name: 'SpaceX Starship — Mars',
     rows: [
@@ -375,7 +376,7 @@
   /* ---- Public API ---------------------------------------------------------- */
   global.Astro = {
     AU_KM, C_KMS, J2000, DAY_MS, HOHMANN_DAYS, ROCKET_KMS, MU_SUN,
-    PLANETS, DSN, ELEMENTS, SUN_FACT, STARSHIP,
+    PLANETS, DSN, ELEMENTS, SUN_FACT, MOON_FACT, STARSHIP,
     julianDate, heliocentric, distanceAU, orbitPath,
     addDays, snapshot, dataRate, leadAngle,
     hohmann, transfer, keplerProp, lambert, launchWindows,

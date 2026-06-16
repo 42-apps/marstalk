@@ -362,6 +362,7 @@
   function tooltipHTML(key) {
     if (key === 'rocket') return rocketTip();
     if (key === 'Sun') return sunTip();
+    if (key === 'Moon') return moonTip();
     return planetTip(key);
   }
   function planetTip(name) {
@@ -386,6 +387,15 @@
       '<div class="tip-rows"><span class="k">Diameter</span><span class="v">' + (2 * s.radiusKm).toLocaleString() + ' km</span>' +
       '<span class="k">vs Earth</span><span class="v">~109× wider</span></div>' +
       '<div class="tip-blurb">' + s.blurb + '</div>';
+  }
+  function moonTip() {
+    const m = A.MOON_FACT;
+    return '<div class="tip-title"><span class="tip-dot" style="background:#cfd6e0"></span>' + m.name + '</div>' +
+      '<div class="tip-rows">' +
+      '<span class="k">Diameter</span><span class="v">' + (2 * m.radiusKm).toLocaleString() + ' km</span>' +
+      '<span class="k">From Earth</span><span class="v">384,400 km</span>' +
+      '<span class="k">Light delay</span><span class="v">~1.3 s</span>' +
+      '</div><div class="tip-blurb">' + m.blurb + '</div>';
   }
   function rocketTip() {
     const s = A.STARSHIP;

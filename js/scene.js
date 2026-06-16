@@ -21,6 +21,7 @@
   const bodies = {};               // name -> { mesh, label }
   let distLine, aimLine, ghostMars, ghostLabel;
   let dsnGroup, dsnDots = [], earthSpin = 0;
+  let moon = null, moonLabel = null, moonAngle = 0;
   let rocket, rocketTrail, rocketPlan, rocketCurve = null, rocketActive = false, rocketT = 0;
   let rocketTransfer = null, rocketArrDate = null, rocketTofDays = 0, rocketFlame = null;
   const photons = new Map();   // id -> { dir, sprite, trail, sx, sy }
@@ -34,6 +35,13 @@
     light: 0x6fe3ff, aim: 0xffcf5a, rocket: 0x8cff9e,
     sun: 0xffd27a, ghost: 0xffb15a
   };
+
+  let texLoader;
+  function loadTex(name) {
+    const t = texLoader.load('textures/' + name + '.jpg');
+    t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
+    return t;
+  }
 
   /* ---- small helpers ------------------------------------------------------- */
   function makeLabel(text, hex, sizeU) {
@@ -81,6 +89,8 @@
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.setSize(innerWidth, innerHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    texLoader = new THREE.TextureLoader();
     container.appendChild(renderer.domElement);
 
     scene = new THREE.Scene();
@@ -94,13 +104,14 @@
     controls.minDistance = 20; controls.maxDistance = 900;
     controls.target.set(0, 0, 0);
 
-    scene.add(new THREE.AmbientLight(0x404a66, 0.55));
+    scene.add(new THREE.AmbientLight(0x5a6a86, 0.4));
     const sunLight = new THREE.PointLight(0xfff2d8, 2.4, 0, 1.2);
     scene.add(sunLight);
 
     buildStarfield();
     buildSun();
     buildPlanets();
+    buildMoon();
     buildOrbits();
     buildLines();
     buildDSN();
@@ -131,8 +142,8 @@
 
   function buildSun() {
     sun = new THREE.Mesh(
-      new THREE.SphereGeometry(5.6, 32, 32),
-      new THREE.MeshBasicMaterial({ color: COL.sun })
+      new THREE.SphereGeometry(5.6, 48, 48),
+      new THREE.MeshBasicMaterial({ map: loadTex('sun') })
     );
     scene.add(sun);
     sun.userData.hoverKey = 'Sun';
@@ -144,21 +155,36 @@
   function buildPlanets() {
     A.PLANETS.forEach(p => {
       const r = p.vsize * 1.5;
+      const tex = loadTex(p.name.toLowerCase());
       const mat = new THREE.MeshStandardMaterial({
-        color: p.color, emissive: p.color, emissiveIntensity: 0.18, roughness: 0.85, metalness: 0.0
+        map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.24,
+        roughness: 1, metalness: 0
       });
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 28), mat);
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 48, 48), mat);
       mesh.userData.hoverKey = p.name;
+      mesh.rotation.y = Math.random() * Math.PI * 2;   // varied starting longitudes
       scene.add(mesh);
       const big = (p.name === 'Earth' || p.name === 'Mars');
       const label = makeLabel(p.name, p.color === 0x4a90e2 ? 0x7db6ff : p.color, big ? 4.6 : 3.4);
-      label.visible = big;            // keep clutter down; show all on hover-zoom later
+      label.visible = big;            // keep clutter down; Earth & Mars labelled
       scene.add(label);
-      // highlight ring for Earth & Mars
-      let halo = null;
-      if (big) { halo = radialSprite(p.color, r * 6, 0.5); mesh.add(halo); }
-      bodies[p.name] = { mesh, label, r, halo, big };
+      bodies[p.name] = { mesh, label, r, big };
     });
+  }
+
+  // Earth's Moon — real size ratio (~0.27× Earth), distance exaggerated so it's
+  // visible at this scale. Orbits Earth slowly; textured like the planets.
+  function buildMoon() {
+    const tex = loadTex('moon');
+    moon = new THREE.Mesh(
+      new THREE.SphereGeometry(bodyR('Earth') * 0.27, 32, 32),
+      new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.24, roughness: 1, metalness: 0 })
+    );
+    moon.userData.hoverKey = 'Moon';
+    scene.add(moon);
+    moonLabel = makeLabel('Moon', 0xcfd6e0, 2.4);
+    moonLabel.visible = false;
+    scene.add(moonLabel);
   }
 
   function buildOrbits() {
@@ -346,6 +372,8 @@
     controls.update();
     if (sun) sun.rotation.y += dt * 0.05;
     if (starfield) starfield.rotation.y += dt * 0.003;
+    A.PLANETS.forEach(p => { bodies[p.name].mesh.rotation.y += dt * 0.12; });   // spin textured planets
+    updateMoon(dt);
 
     // gentle Earth spin → DSN constellation turns; recompute who faces Mars
     earthSpin += dt * 0.5;
@@ -470,6 +498,15 @@
     step();
   }
 
+  function updateMoon(dt) {
+    if (!moon) return;
+    moonAngle += dt * 0.5;
+    const e = bodies.Earth.mesh.position, md = bodyR('Earth') * 3.6;
+    moon.position.set(e.x + Math.cos(moonAngle) * md, e.y + Math.sin(moonAngle) * md * 0.3, e.z + Math.sin(moonAngle) * md);
+    moon.rotation.y += dt * 0.1;
+    moonLabel.position.set(moon.position.x, moon.position.y + bodyR('Earth') * 0.27 + 1.5, moon.position.z);
+  }
+
   // hover detection → reports a hover key ('Sun' | planet name | 'rocket') + cursor pos
   function onPointerMove(e) {
     const rect = renderer.domElement.getBoundingClientRect();
@@ -479,6 +516,7 @@
     raycaster.setFromCamera(pointerNDC, camera);
     const targets = A.PLANETS.map(p => bodies[p.name].mesh);
     targets.push(sun);
+    if (moon) targets.push(moon);
     if (rocket.visible) targets.push(rocket);
     const hits = raycaster.intersectObjects(targets, true);
     let key = null;

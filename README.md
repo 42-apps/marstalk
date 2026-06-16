@@ -10,7 +10,7 @@ MarsTalk is a zoomed-out, live 3D view of the inner solar system, built to make 
 
 ## What it does
 
-- **Real 3D solar system.** The Sun and inner planets are drawn at their true heliocentric positions for any date, using Keplerian orbital elements (JPL/Standish, valid 1800–2050).
+- **Real 3D solar system.** The Sun and inner planets are drawn at their true heliocentric positions for any date, using Keplerian orbital elements (JPL/Standish, valid 1800–2050). Every body wears a real NASA-derived surface texture, spins on its axis, and Earth carries its Moon.
 - **The gulf, measured live.** A glowing line connects Earth and Mars. Read the distance (million km & AU), the **one-way light delay**, the **round-trip "ping"**, the **rocket transfer time**, and the **peak data rate** — all updating as you move through time.
 - **Aim where Mars *will be*.** A dashed amber line and a ghost planet show where Mars will have moved to by the time a rocket arrives — the "lead the target" problem, drawn to scale.
 - **Launch a Starship.** Fire a rocket and watch the chase play out in fast-forward. It flies the **real two-body transfer** (Lambert-solved + Kepler-propagated) from Earth's launch position to Mars's true position at arrival — speeding up near the Sun, slowing near aphelion — aiming at empty space until Mars slides in to meet it. A HUD shows the live **×real-time factor** (default ~30 s flight ≈ 700,000×) and **day X / N** progress; pick the flight length (15–120 s).
@@ -63,4 +63,4 @@ background.js     opens index.html on toolbar click
 icons/            logo.svg + rendered PNGs
 ```
 
-Built with [Three.js](https://threejs.org/). Have fun out there. 🚀
+Built with [Three.js](https://threejs.org/). Planet, Sun & Moon textures by [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0, NASA-derived), bundled locally. Have fun out there. 🚀
