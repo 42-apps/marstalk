@@ -1,0 +1,45 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="space" cx="38%" cy="32%" r="80%">
+      <stop offset="0%" stop-color="#16203a"/>
+      <stop offset="60%" stop-color="#0a0f1f"/>
+      <stop offset="100%" stop-color="#04060d"/>
+    </radialGradient>
+    <radialGradient id="mars" cx="36%" cy="34%" r="70%">
+      <stop offset="0%" stop-color="#ff9166"/>
+      <stop offset="55%" stop-color="#e0623a"/>
+      <stop offset="100%" stop-color="#a33d22"/>
+    </radialGradient>
+    <radialGradient id="earth" cx="38%" cy="36%" r="70%">
+      <stop offset="0%" stop-color="#7db6ff"/>
+      <stop offset="100%" stop-color="#2f6fc0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#space)"/>
+
+  <!-- stars -->
+  <g fill="#cfe0ff">
+    <circle cx="120" cy="96" r="3"/><circle cx="430" cy="140" r="2.4" opacity=".8"/>
+    <circle cx="380" cy="70" r="2" opacity=".7"/><circle cx="90" cy="300" r="2.2" opacity=".7"/>
+    <circle cx="150" cy="420" r="2.6" opacity=".8"/><circle cx="450" cy="360" r="2" opacity=".6"/>
+  </g>
+
+  <!-- signal arcs from Earth toward Mars -->
+  <g fill="none" stroke="#6fe3ff" stroke-linecap="round">
+    <path d="M188 318 Q300 150 372 196" stroke-width="13" opacity=".95"/>
+    <path d="M168 348 Q300 120 396 176" stroke-width="11" opacity=".6"/>
+    <path d="M150 374 Q300 96 418 158" stroke-width="9" opacity=".32"/>
+  </g>
+
+  <!-- Mars -->
+  <circle cx="356" cy="186" r="86" fill="url(#mars)"/>
+  <circle cx="330" cy="160" r="16" fill="#ffffff" opacity=".12"/>
+  <circle cx="384" cy="208" r="12" fill="#7a2d18" opacity=".35"/>
+
+  <!-- Earth as a chat node -->
+  <circle cx="168" cy="356" r="58" fill="url(#earth)"/>
+  <path d="M120 392 q-10 22 -30 30 q26 2 44 -14 z" fill="#2f6fc0"/>
+  <ellipse cx="150" cy="340" rx="20" ry="12" fill="#5fe08a" opacity=".7"/>
+  <ellipse cx="188" cy="372" rx="16" ry="10" fill="#5fe08a" opacity=".6"/>
+</svg>

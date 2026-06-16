@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MarsTalk — talking across the void to Mars</title>
+<meta name="description" content="A live 3D view of the Earth–Mars gulf: how far it is right now, how long light and a rocket take to cross it, the Deep Space Network that carries the signal, and what it's like to text the red planet.">
+<link rel="stylesheet" href="marstalk.css?v=2">
+</head>
+<body>
+
+  <!-- ===== 3D solar system (Three.js renders into here) ===== -->
+  <div id="stage"></div>
+  <div id="loading"><div class="spinner"></div><span>Charting the solar system…</span></div>
+
+  <!-- ===== Brand ===== -->
+  <header id="brand">
+    <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+      <circle cx="13" cy="20" r="6.5" fill="#4a90e2"/>
+      <circle cx="30" cy="16" r="4.5" fill="#e0623a"/>
+      <path d="M17 18.5 Q23 11 27 14.5" fill="none" stroke="#6fe3ff" stroke-width="1.4" stroke-linecap="round" opacity=".9"/>
+      <path d="M18 21 Q25 15 29 19" fill="none" stroke="#6fe3ff" stroke-width="1.2" stroke-linecap="round" opacity=".5"/>
+    </svg>
+    <div class="brand-txt">
+      <span class="brand-name">Mars<span class="accent">Talk</span></span>
+      <span class="brand-sub">how far, how long, how we stay in touch</span>
+    </div>
+  </header>
+
+  <!-- ===== Live stat chips ===== -->
+  <section id="stats" aria-label="Live Earth–Mars statistics">
+    <div class="chip" id="chipDist">
+      <span class="chip-ic">↔</span>
+      <div><span class="chip-val" id="vDist">—</span><span class="chip-lbl">distance now</span></div>
+    </div>
+    <div class="chip" id="chipLight">
+      <span class="chip-ic">💡</span>
+      <div><span class="chip-val" id="vLight">—</span><span class="chip-lbl">one-way at light speed</span></div>
+    </div>
+    <div class="chip" id="chipRound">
+      <span class="chip-ic">↺</span>
+      <div><span class="chip-val" id="vRound">—</span><span class="chip-lbl">round-trip ("ping")</span></div>
+    </div>
+    <div class="chip" id="chipRocket">
+      <span class="chip-ic">🚀</span>
+      <div><span class="chip-val" id="vRocket">—</span><span class="chip-lbl">rocket (Hohmann transfer)</span></div>
+    </div>
+    <div class="chip" id="chipRate">
+      <span class="chip-ic">📶</span>
+      <div><span class="chip-val" id="vRate">—</span><span class="chip-lbl">peak data rate (MRO-class)</span></div>
+    </div>
+  </section>
+
+  <!-- ===== Deep Space Network panel ===== -->
+  <aside id="dsnPanel" class="panel">
+    <h2 class="panel-h">📡 Deep Space Network</h2>
+    <p class="panel-note">Three dishes ~120° apart, so one always faces Mars as Earth spins.</p>
+    <ul id="dsnList"></ul>
+    <div class="dsn-foot">
+      <span>Carrier signal</span>
+      <strong id="dsnBand">X-band · 7–8 GHz</strong>
+    </div>
+  </aside>
+
+  <!-- ===== Messenger ===== -->
+  <aside id="messenger" class="panel">
+    <h2 class="panel-h">💬 Message the void</h2>
+    <div class="dir" id="dirToggle" role="group" aria-label="Direction">
+      <button class="dir-btn active" data-dir="E2M"><span class="dot earth"></span>Earth → Mars</button>
+      <button class="dir-btn" data-dir="M2E">Mars → Earth<span class="dot mars"></span></button>
+    </div>
+    <textarea id="msgInput" maxlength="280" rows="2" placeholder="Type a message to send across space…"></textarea>
+    <div class="msg-row">
+      <span class="hint" id="msgHint">arrives in —</span>
+      <button id="sendBtn">Send →</button>
+    </div>
+    <div id="msgLog" aria-live="polite"></div>
+  </aside>
+
+  <!-- ===== Legend ===== -->
+  <div id="legend">
+    <span><i class="ln light"></i>light / radio path</span>
+    <span><i class="ln aim"></i>where Mars will be</span>
+    <span><i class="ln rocket"></i>rocket trajectory</span>
+  </div>
+
+  <!-- ===== Timeline / time machine ===== -->
+  <footer id="timeline">
+    <div class="tl-left">
+      <button id="todayBtn" title="Jump to today">● Today</button>
+      <button id="playBtn" title="Play time">▶</button>
+      <div class="speed" id="speedWrap">
+        <label for="speedSel">speed</label>
+        <select id="speedSel">
+          <option value="7">1 wk / s</option>
+          <option value="30" selected>1 mo / s</option>
+          <option value="91">1 qtr / s</option>
+          <option value="365">1 yr / s</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="tl-center">
+      <input type="range" id="timeSlider" min="-1825" max="1825" value="0" step="1" aria-label="Time travel — days from today">
+      <div class="tl-readout">
+        <span id="tlDate">—</span>
+        <span id="tlRel" class="tl-rel">today</span>
+        <span id="tlState" class="tl-state"></span>
+      </div>
+    </div>
+
+    <div class="tl-right">
+      <button id="launchBtn" title="Launch a rocket to Mars">🚀 Launch rocket</button>
+    </div>
+  </footer>
+
+  <!-- ===== Help / intro card ===== -->
+  <div id="intro" class="modal">
+    <div class="modal-card">
+      <button class="modal-x" id="introX" aria-label="Close">✕</button>
+      <h1>🔴 Welcome to <strong>MarsTalk</strong></h1>
+      <p>You're looking down on the real solar system, positioned for <strong id="introDate">today</strong>. The glowing line is the gulf between <span class="earth-t">Earth</span> and <span class="mars-t">Mars</span> right now.</p>
+      <ul>
+        <li><b>Drag the timeline</b> at the bottom to fly through the years and watch the two worlds drift close and far apart.</li>
+        <li><b>💡 Light</b> takes minutes to cross that gap; a <b>🚀 rocket</b> takes months — and must aim for where Mars <i>will be</i>, not where it is.</li>
+        <li><b>Launch a rocket</b> to watch the chase play out in fast-forward.</li>
+        <li><b>Send a message</b> and follow your words across space with a live transmission clock.</li>
+      </ul>
+      <button id="introGo">Explore the void →</button>
+    </div>
+  </div>
+
+  <!-- ===== Toast ===== -->
+  <div id="toast"></div>
+
+  <!-- libs (vendored locally — MV3 blocks remote scripts) -->
+  <script src="lib/three.min.js"></script>
+  <script src="lib/OrbitControls.js"></script>
+  <!-- app -->
+  <script src="js/astro.js?v=2"></script>
+  <script src="js/scene.js?v=2"></script>
+  <script src="js/app.js?v=2"></script>
+</body>
+</html>
