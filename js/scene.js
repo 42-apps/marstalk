@@ -23,7 +23,8 @@
   let dsnGroup, dsnDots = [], earthSpin = 0;
   let rocket, rocketTrail, rocketPlan, rocketCurve = null, rocketActive = false, rocketT = 0;
   let rocketTransfer = null, rocketArrDate = null, rocketTofDays = 0, rocketFlame = null;
-  const photons = new Map();   // id -> { dir, mesh, glow, trail }
+  const photons = new Map();   // id -> { dir, sprite, trail, sx, sy }
+  const ENV_SIZE = 6;          // world-size of the flying envelopes
   let curDate = new Date();
   let _activeDSN = -1;
 
@@ -235,19 +236,33 @@
     scene.add(rocketPlan);
   }
 
-  // little envelope icon, drawn once per direction and cached
+  // A clear envelope on a soft glow halo, drawn once per direction and cached.
   const envTex = {};
   function envelopeTexture(dir) {
     if (envTex[dir]) return envTex[dir];
-    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
     const x = c.getContext('2d');
-    const body = dir === 'E2M' ? '#d4e8ff' : '#ffe0d2';
-    const edge = dir === 'E2M' ? '#4a90e2' : '#e0623a';
-    x.shadowColor = edge; x.shadowBlur = 16;
-    x.fillStyle = body; x.strokeStyle = edge; x.lineWidth = 5; x.lineJoin = 'round';
-    x.beginPath(); x.rect(22, 38, 84, 54); x.fill(); x.stroke();
-    x.shadowBlur = 0;
-    x.beginPath(); x.moveTo(22, 40); x.lineTo(64, 71); x.lineTo(106, 40); x.stroke();
+    const glow   = dir === 'E2M' ? 'rgba(111,200,255,0.6)' : 'rgba(255,150,110,0.6)';
+    const body   = dir === 'E2M' ? '#cfe6ff' : '#ffdac8';
+    const edge   = dir === 'E2M' ? '#2f6fd0' : '#c8502a';
+    const accent = dir === 'E2M' ? '#1d4f9e' : '#a13a18';
+    // soft glow halo
+    const g = x.createRadialGradient(S/2, S/2, 8, S/2, S/2, S/2);
+    g.addColorStop(0, glow); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, S, S);
+    // envelope body (rounded rectangle)
+    const L = 48, T = 80, W = 160, H = 104, r = 16;
+    x.beginPath();
+    x.moveTo(L + r, T);
+    x.arcTo(L + W, T, L + W, T + H, r); x.arcTo(L + W, T + H, L, T + H, r);
+    x.arcTo(L, T + H, L, T, r);         x.arcTo(L, T, L + W, T, r);
+    x.closePath();
+    x.fillStyle = body; x.fill();
+    x.lineWidth = 9; x.strokeStyle = edge; x.lineJoin = 'round'; x.stroke();
+    // flap
+    x.beginPath();
+    x.moveTo(L + 5, T + 8); x.lineTo(L + W / 2, T + H * 0.52); x.lineTo(L + W - 5, T + 8);
+    x.lineWidth = 9; x.strokeStyle = accent; x.lineCap = 'round'; x.stroke();
     const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter; tex.anisotropy = 4;
     envTex[dir] = tex; return tex;
   }
@@ -255,7 +270,7 @@
   // both directions, spread laterally around the line so they don't stack up.
   function addPhoton(id, dir) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: envelopeTexture(dir), transparent: true, depthTest: false, depthWrite: false }));
-    sprite.scale.set(3.4, 3.4, 1); sprite.renderOrder = 22;
+    sprite.scale.set(ENV_SIZE, ENV_SIZE, 1); sprite.renderOrder = 22;
     const col = dir === 'E2M' ? 0x9fd0ff : 0xffb59a;
     const trail = new THREE.Line(new THREE.BufferGeometry(),
       new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.4 }));
@@ -331,8 +346,12 @@
     // pulse the light path
     if (distLine) distLine.material.opacity = 0.65 + 0.3 * Math.sin(t * 2.2);
 
-    // gentle bob on in-flight envelopes; flicker the rocket exhaust
-    photons.forEach(p => { const s = 3.4 * (1 + 0.06 * Math.sin(t * 5)); p.sprite.scale.set(s, s, 1); });
+    // flutter + gentle bob on in-flight envelopes; flicker the rocket exhaust
+    photons.forEach(p => {
+      const s = ENV_SIZE * (1 + 0.05 * Math.sin(t * 4));
+      p.sprite.scale.set(s, s, 1);
+      p.sprite.material.rotation = 0.16 * Math.sin(t * 2.4 + (p.sx + 0.5) * 6);
+    });
     if (rocketFlame && rocket.visible) rocketFlame.scale.set(1, 0.75 + 0.35 * Math.abs(Math.sin(t * 22)), 1);
 
     renderer.render(scene, camera);

@@ -278,9 +278,11 @@
       psi = (psiUp + psiLow) / 2;
       [c2, c3] = stumpff(psi);
     }
-    const f = 1 - y / r1m, g = A * Math.sqrt(y / MU_SUN);
+    const f = 1 - y / r1m, g = A * Math.sqrt(y / MU_SUN), gdot = 1 - y / r2m;
     if (g === 0 || !isFinite(g)) return null;
-    return vscale(vsub(r2, vscale(r1, f)), 1 / g);
+    const v1 = vscale(vsub(r2, vscale(r1, f)), 1 / g);          // departure velocity
+    const v2 = vscale(vsub(vscale(r2, gdot), r1), 1 / g);       // arrival velocity
+    return { v1, v2 };
   }
 
   // Per-date Hohmann transfer time from the ACTUAL heliocentric radii (varies
@@ -300,12 +302,54 @@
     const r1 = heliocentric('Earth', date);
     const tof = hohmann(date).days;
     const r2 = heliocentric('Mars', addDays(date, tof));
-    const v1 = lambert(r1, r2, tof);
-    if (!v1 || !isFinite(v1.x) || !isFinite(v1.y) || !isFinite(v1.z)) return null;
+    const lam = lambert(r1, r2, tof);
+    if (!lam || !isFinite(lam.v1.x) || !isFinite(lam.v1.y) || !isFinite(lam.v1.z)) return null;
+    const v1 = lam.v1;
     return {
       tofDays: tof, r1, r2, v1,
       posAt: (frac) => frac <= 0 ? r1 : (frac >= 1 ? r2 : keplerProp(r1, v1, frac * tof))
     };
+  }
+
+  /* ---- Launch windows: low-energy Hohmann opportunities Earth → Mars ------
+     For each candidate launch date we Lambert-solve a Hohmann-duration transfer
+     and total the heliocentric Δv (departure rel. Earth + arrival rel. Mars).
+     Real windows are the local minima of that Δv (they recur ~every 26 mo).   */
+  const AUDAY_KMS = AU_KM / 86400;            // 1 AU/day in km/s
+  function planetVel(name, date) {
+    const dt = 0.5;
+    return vscale(vsub(heliocentric(name, addDays(date, dt)), heliocentric(name, addDays(date, -dt))), 1 / (2 * dt));
+  }
+  function transferCost(date) {
+    const r1 = heliocentric('Earth', date);
+    const tof = hohmann(date).days;
+    const r2 = heliocentric('Mars', addDays(date, tof));
+    const lam = lambert(r1, r2, tof);
+    if (!lam || !isFinite(lam.v1.x) || !isFinite(lam.v2.x)) return null;
+    const dvDep = vmag(vsub(lam.v1, planetVel('Earth', date)));
+    const dvArr = vmag(vsub(lam.v2, planetVel('Mars', addDays(date, tof))));
+    return { tof, dvDepart: dvDep * AUDAY_KMS, dvArrive: dvArr * AUDAY_KMS, dvTotal: (dvDep + dvArr) * AUDAY_KMS };
+  }
+  function launchWindows(fromDate, count, years) {
+    count = count || 8; years = years || 17;
+    const step = 5, N = Math.round(years * 365.25 / step);
+    const s = [];
+    for (let i = 0; i <= N; i++) { const d = addDays(fromDate, i * step); const c = transferCost(d); if (c) s.push({ d, dv: c.dvTotal, c }); }
+    const wins = [];
+    for (let k = 1; k < s.length - 1; k++) {
+      if (s[k].dv < s[k - 1].dv && s[k].dv <= s[k + 1].dv) {           // local Δv minimum
+        let best = s[k];
+        for (let dd = -step + 1; dd < step; dd++) {                    // refine to the day
+          const d = addDays(s[k].d, dd); const c = transferCost(d);
+          if (c && c.dvTotal < best.dv) best = { d, dv: c.dvTotal, c };
+        }
+        if (!wins.length || (best.d - wins[wins.length - 1].d) > 120 * DAY_MS) wins.push(best);
+      }
+    }
+    return wins.slice(0, count).map(w => ({
+      launch: w.d, tofDays: w.c.tof, arrive: addDays(w.d, w.c.tof),
+      dvTotal: w.c.dvTotal, dvDepart: w.c.dvDepart, dvArrive: w.c.dvArrive
+    }));
   }
 
   /* ---- Public API ---------------------------------------------------------- */
@@ -314,7 +358,7 @@
     PLANETS, DSN, ELEMENTS,
     julianDate, heliocentric, distanceAU, orbitPath,
     addDays, snapshot, dataRate, leadAngle,
-    hohmann, transfer, keplerProp, lambert,
+    hohmann, transfer, keplerProp, lambert, launchWindows,
     fmtDuration, fmtDays, fmtKM, fmtRate, fmtDate
   };
 })(typeof window !== 'undefined' ? window : this);

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MarsTalk — talking across the void to Mars</title>
 <meta name="description" content="A live 3D view of the Earth–Mars gulf: how far it is right now, how long light and a rocket take to cross it, the Deep Space Network that carries the signal, and what it's like to text the red planet.">
-<link rel="stylesheet" href="marstalk.css?v=5">
+<link rel="stylesheet" href="marstalk.css?v=6">
 </head>
 <body>
 
@@ -101,7 +101,7 @@
     </div>
 
     <div class="tl-center">
-      <input type="range" id="timeSlider" min="-1825" max="1825" value="0" step="1" aria-label="Time travel — days from today">
+      <input type="range" id="timeSlider" min="-3650" max="3650" value="0" step="1" aria-label="Time travel — days from today">
       <div class="tl-readout">
         <span id="tlDate">—</span>
         <span id="tlRel" class="tl-rel">today</span>
@@ -110,6 +110,7 @@
     </div>
 
     <div class="tl-right">
+      <button id="windowsBtn" title="Best dates to launch to Mars">🗓 Windows</button>
       <div class="rkt-speed">
         <label for="rocketDur">flight</label>
         <select id="rocketDur" title="How long the ~9-month trip is squeezed into">
@@ -140,6 +141,18 @@
     </div>
   </div>
 
+  <!-- ===== Launch windows table ===== -->
+  <div id="windowsModal" class="modal gone">
+    <div class="modal-card win-card">
+      <button class="modal-x" id="winX" aria-label="Close">✕</button>
+      <h1>🗓 Mars launch windows</h1>
+      <p>The efficient moments to leave — when Earth and Mars line up for a low-energy Hohmann transfer (≈ every 26 months). Jump to one, then hit <b>🚀 Launch rocket</b>.</p>
+      <div class="win-row win-head"><span>Launch</span><span>Arrives</span><span>Trip</span><span>Δv · efficiency</span><span></span></div>
+      <div id="windowsList" class="win-list"></div>
+      <p class="win-foot">Δv = total heliocentric burn (lower = more efficient). Two-body estimate; real missions add launch-window margins.</p>
+    </div>
+  </div>
+
   <!-- ===== Toast ===== -->
   <div id="toast"></div>
 
@@ -156,8 +169,8 @@
   <script src="lib/three.min.js"></script>
   <script src="lib/OrbitControls.js"></script>
   <!-- app -->
-  <script src="js/astro.js?v=5"></script>
-  <script src="js/scene.js?v=5"></script>
-  <script src="js/app.js?v=5"></script>
+  <script src="js/astro.js?v=6"></script>
+  <script src="js/scene.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
 </body>
 </html>

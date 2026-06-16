@@ -62,7 +62,7 @@
 
     // keep slider synced (clamped to its range)
     const off = Math.round((date.getTime() - TODAY.getTime()) / DAY);
-    $('timeSlider').value = Math.max(-1825, Math.min(1825, off));
+    $('timeSlider').value = Math.max(-3650, Math.min(3650, off));
 
     // DSN rate + message hint
     state._rate = s.dataRateMbps;
@@ -94,8 +94,8 @@
     } else if (state.playing) {
       let off = (state.date.getTime() - TODAY.getTime()) / DAY;
       off += state.speed * state.playDir * dt;
-      if (off >= 1825)  { off = 1825;  state.playDir = -1; }
-      if (off <= -1825) { off = -1825; state.playDir = 1; }
+      if (off >= 3650)  { off = 3650;  state.playDir = -1; }
+      if (off <= -3650) { off = -3650; state.playDir = 1; }
       setDate(new Date(TODAY.getTime() + off * DAY));
     }
 
@@ -116,6 +116,9 @@
     $('speedSel').addEventListener('change', (e) => { state.speed = +e.target.value; });
     $('rocketDur').addEventListener('change', updateFactorHint);
     $('launchBtn').addEventListener('click', launchRocket);
+    $('windowsBtn').addEventListener('click', openWindows);
+    $('winX').addEventListener('click', () => $('windowsModal').classList.add('gone'));
+    $('windowsModal').addEventListener('click', (e) => { if (e.target.id === 'windowsModal') $('windowsModal').classList.add('gone'); });
 
     // message direction
     document.querySelectorAll('.dir-btn').forEach(b => b.addEventListener('click', () => {
@@ -312,9 +315,9 @@
   /* ---- timeline closeness heatmap ----------------------------------------- */
   function paintTimelineHeatmap() {
     const stops = [];
-    const N = 64;
+    const N = 100;
     for (let i = 0; i <= N; i++) {
-      const off = -1825 + (3650 * i / N);
+      const off = -3650 + (7300 * i / N);
       const d = new Date(TODAY.getTime() + off * DAY);
       const au = A.snapshot(d).distAU;
       const k = Math.max(0, Math.min(1, (au - 0.45) / (2.4 - 0.45))); // 0 close → 1 far
@@ -326,6 +329,43 @@
     const ar=(a>>16)&255, ag=(a>>8)&255, ab=a&255, br=(b>>16)&255, bg=(b>>8)&255, bb=b&255;
     const r=Math.round(ar+(br-ar)*t), g=Math.round(ag+(bg-ag)*t), bl=Math.round(ab+(bb-ab)*t);
     return 'rgb(' + r + ',' + g + ',' + bl + ')';
+  }
+
+  /* ---- launch windows table ------------------------------------------------ */
+  let windowsBuilt = false;
+  function openWindows() {
+    if (!windowsBuilt) { renderWindows(); windowsBuilt = true; }
+    $('windowsModal').classList.remove('gone');
+  }
+  function renderWindows() {
+    const wins = A.launchWindows(TODAY, 8, 17);
+    const list = $('windowsList'); list.innerHTML = '';
+    if (!wins.length) { list.innerHTML = '<p class="win-foot">No windows found.</p>'; return; }
+    const dvs = wins.map(w => w.dvTotal);
+    const minDv = Math.min.apply(null, dvs), maxDv = Math.max.apply(null, dvs);
+    wins.forEach(w => {
+      const best = w.dvTotal === minDv;
+      const frac = (w.dvTotal - minDv) / Math.max(0.01, maxDv - minDv);   // 0 best .. 1 worst
+      const hue = Math.round(140 - frac * 130);                            // green → red
+      const row = document.createElement('div');
+      row.className = 'win-row win-item' + (best ? ' best' : '');
+      row.innerHTML =
+        '<span class="wl-date">' + A.fmtDate(w.launch) + (best ? '<span class="win-best-tag">★ BEST</span>' : '') + '</span>' +
+        '<span class="wl-arr">' + A.fmtDate(w.arrive) + '</span>' +
+        '<span class="wl-trip">' + Math.round(w.tofDays) + ' d</span>' +
+        '<span class="wl-dv"><i class="dvbar" style="width:' + Math.round(12 + frac * 48) + 'px;background:hsl(' + hue + ',72%,55%)"></i>' + w.dvTotal.toFixed(1) + ' km/s</span>' +
+        '<button class="wl-jump">Jump →</button>';
+      const go = () => jumpToWindow(w);
+      row.querySelector('.wl-jump').addEventListener('click', (e) => { e.stopPropagation(); go(); });
+      row.addEventListener('click', go);
+      list.appendChild(row);
+    });
+  }
+  function jumpToWindow(w) {
+    stopPlay();
+    setDate(new Date(w.launch.getTime()));
+    $('windowsModal').classList.add('gone');
+    toast('🗓 Jumped to ' + A.fmtDate(w.launch) + ' — optimal Mars window (Δv ' + w.dvTotal.toFixed(1) + ' km/s). Now hit 🚀 Launch rocket!');
   }
 
   /* ---- toast --------------------------------------------------------------- */
