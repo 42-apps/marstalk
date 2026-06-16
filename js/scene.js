@@ -213,23 +213,36 @@
   }
   function bodyR(name){ const p = A.PLANETS.find(x=>x.name===name); return p.vsize*1.5; }
 
-  /* Deep Space Network — three dishes on a ring around Earth (~120° apart). */
+  // lat/lon → position on a sphere, matching three.js SphereGeometry +
+  // an equirectangular (prime-meridian-centred) Earth texture.
+  function latLonToVec3(lat, lon, r) {
+    const d = Math.PI / 180, la = lat * d, lo = lon * d, c = Math.cos(la);
+    return new THREE.Vector3(r * c * Math.cos(lo), r * Math.sin(la), -r * c * Math.sin(lo));
+  }
+
+  /* Deep Space Network — real-lat/lon pins ON Earth's surface, parented to the
+     Earth mesh so they rotate with the globe (Goldstone over California, Madrid
+     over Spain, Canberra over Australia). The one facing Mars lights up. */
   function buildDSN() {
-    dsnGroup = new THREE.Group();
-    scene.add(dsnGroup);
-    const rE = bodyR('Earth');
+    const earth = bodies.Earth.mesh, rE = bodyR('Earth');
     A.DSN.forEach((s, i) => {
-      const ang = i * 2 * Math.PI / 3;
-      const dot = new THREE.Mesh(
-        new THREE.SphereGeometry(0.34, 12, 12),
+      const dir = latLonToVec3(s.lat, s.lon, 1).normalize();
+      const stalk = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([dir.clone().multiplyScalar(rE), dir.clone().multiplyScalar(rE + 0.2)]),
+        new THREE.LineBasicMaterial({ color: 0x8aa0c0, transparent: true, opacity: 0.55 })
+      );
+      stalk.raycast = () => {};
+      earth.add(stalk);
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 12, 12),
         new THREE.MeshBasicMaterial({ color: 0x8aa0c0 })
       );
-      // place on a ring slightly above Earth's surface, tilted to read in 3D
-      dot.position.set(Math.cos(ang) * rE * 1.5, Math.sin(ang) * rE * 0.5, Math.sin(ang) * rE * 1.5);
-      dot.userData = { i, base: dot.position.clone() };
-      dot.add(radialSprite(COL.light, 4, 0)); // glow, opacity toggled when active
-      dsnGroup.add(dot);
-      dsnDots.push(dot);
+      head.position.copy(dir.clone().multiplyScalar(rE + 0.2));
+      head.userData.hoverKey = 'DSN:' + i;
+      head.userData.stalk = stalk;
+      head.add(radialSprite(COL.light, 1.3, 0));   // glow toggled when active
+      earth.add(head);
+      dsnDots.push(head);
     });
   }
 
@@ -355,8 +368,6 @@
     ghostMars.position.copy(future);
     ghostLabel.position.set(future.x, future.y + bodyR('Mars') + 3, future.z);
 
-    // DSN follows Earth
-    dsnGroup.position.copy(e);
   }
 
   /* ---- render loop --------------------------------------------------------- */
@@ -370,9 +381,7 @@
     A.PLANETS.forEach(p => { bodies[p.name].mesh.rotation.y += dt * 0.12; });   // spin textured planets
     updateMoon(dt);
 
-    // gentle Earth spin → DSN constellation turns; recompute who faces Mars
-    earthSpin += dt * 0.5;
-    dsnGroup.rotation.y = earthSpin;
+    // DSN pins ride the spinning Earth mesh; recompute which faces Mars
     updateDSNActive();
 
     // pulse the light path
@@ -403,8 +412,11 @@
     dsnDots.forEach((d, i) => {
       const on = i === best;
       d.material.color.set(on ? COL.light : 0x8aa0c0);
-      d.scale.setScalar(on ? 1.6 : 1);
+      d.scale.setScalar(on ? 1.7 : 1);
       d.children[0].material.opacity = on ? 0.95 : 0;
+      const st = d.userData.stalk;
+      st.material.color.set(on ? COL.light : 0x8aa0c0);
+      st.material.opacity = on ? 0.95 : 0.5;
     });
     if (best !== _activeDSN) { _activeDSN = best; if (Scene.onDSNChange) Scene.onDSNChange(best); }
   }

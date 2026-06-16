@@ -363,7 +363,19 @@
     if (key === 'rocket') return rocketTip();
     if (key === 'Sun') return sunTip();
     if (key === 'Moon') return moonTip();
+    if (key.indexOf('DSN:') === 0) return dsnTip(+key.slice(4));
     return planetTip(key);
+  }
+  function dsnTip(i) {
+    const d = A.DSN[i], active = Scene.activeDSN === i;
+    return '<div class="tip-title"><span class="tip-dot" style="background:' + (active ? '#6fe3ff' : '#8aa0c0') + '"></span>' + d.name + '</div>' +
+      '<div class="tip-rows">' +
+      '<span class="k">Network</span><span class="v">Deep Space Network</span>' +
+      '<span class="k">Location</span><span class="v">' + d.country + '</span>' +
+      '<span class="k">Antenna</span><span class="v">' + d.dish + '</span>' +
+      '<span class="k">Status</span><span class="v">' + (active ? '▶ live to Mars' : 'standby') + '</span>' +
+      (active && state._rate ? '<span class="k">Downlink</span><span class="v">' + A.fmtRate(state._rate) + '</span>' : '') +
+      '</div><div class="tip-blurb">A ground station — one of three 70 m dishes ~120° apart, so Earth always has one facing Mars.</div>';
   }
   function planetTip(name) {
     const p = A.PLANETS.find(x => x.name === name);
