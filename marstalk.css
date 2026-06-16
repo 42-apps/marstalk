@@ -178,6 +178,24 @@ body.dir-m2e #sendBtn{background:linear-gradient(135deg,var(--mars),#b54327); bo
   font-size:13px; box-shadow:var(--shadow); transition:.35s; pointer-events:none; max-width:80vw; text-align:center}
 #toast.show{opacity:1; transform:translate(-50%,0)}
 
+/* ---- Rocket flight control + HUD ---- */
+.rkt-speed{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--mute)}
+.rkt-speed select{background:rgba(255,255,255,.07); color:var(--ink); border:1px solid var(--glass-brd); border-radius:8px; padding:6px 7px; font-size:11.5px; font-family:inherit}
+.rkt-speed select:disabled{opacity:.5}
+#rktFactorHint{color:var(--rocket); font-weight:650; font-variant-numeric:tabular-nums; min-width:44px}
+#rocketHud{position:fixed; z-index:30; left:50%; bottom:118px; transform:translateX(-50%);
+  display:flex; align-items:center; gap:13px; background:var(--glass); border:1px solid rgba(140,255,158,.4);
+  border-radius:13px; padding:11px 18px; box-shadow:0 8px 30px rgba(0,0,0,.5), 0 0 22px rgba(140,255,158,.12);
+  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px)}
+#rocketHud.hidden{display:none}
+.rkt-ic{font-size:22px}
+.rkt-info{display:flex; flex-direction:column; gap:6px; min-width:240px}
+.rkt-line{display:flex; justify-content:space-between; gap:18px; font-size:12.5px; align-items:baseline}
+#rktProg{color:var(--ink); font-weight:600; font-variant-numeric:tabular-nums}
+#rktFactor{color:var(--rocket); font-weight:700; font-variant-numeric:tabular-nums}
+.rkt-bar{height:4px; border-radius:2px; background:rgba(255,255,255,.13); overflow:hidden}
+.rkt-bar>i{display:block; height:100%; width:0; background:var(--rocket); box-shadow:0 0 8px var(--rocket); transition:width .1s linear}
+
 /* ---- Responsive ---- */
 @media (max-width:980px){
   #stats{max-width:none; left:auto; right:20px; top:64px; transform:none; justify-content:flex-end}
@@ -185,7 +203,7 @@ body.dir-m2e #sendBtn{background:linear-gradient(135deg,var(--mars),#b54327); bo
   .chip-lbl{display:none}
 }
 @media (max-width:680px){
-  #dsnPanel,#legend{display:none}
+  #dsnPanel,#legend,.rkt-speed label{display:none}
   #stats{position:fixed; top:60px; right:12px}
   #messenger{width:min(300px,calc(100vw - 24px)); right:12px}
 }

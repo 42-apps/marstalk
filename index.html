@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MarsTalk — talking across the void to Mars</title>
 <meta name="description" content="A live 3D view of the Earth–Mars gulf: how far it is right now, how long light and a rocket take to cross it, the Deep Space Network that carries the signal, and what it's like to text the red planet.">
-<link rel="stylesheet" href="marstalk.css?v=2">
+<link rel="stylesheet" href="marstalk.css?v=3">
 </head>
 <body>
 
@@ -110,6 +110,16 @@
     </div>
 
     <div class="tl-right">
+      <div class="rkt-speed">
+        <label for="rocketDur">flight</label>
+        <select id="rocketDur" title="How long the ~9-month trip is squeezed into">
+          <option value="15">15 s</option>
+          <option value="30" selected>30 s</option>
+          <option value="60">60 s</option>
+          <option value="120">120 s</option>
+        </select>
+        <span id="rktFactorHint" title="speed-up vs real time">—</span>
+      </div>
       <button id="launchBtn" title="Launch a rocket to Mars">🚀 Launch rocket</button>
     </div>
   </footer>
@@ -133,12 +143,21 @@
   <!-- ===== Toast ===== -->
   <div id="toast"></div>
 
+  <!-- ===== Rocket flight HUD (shown during a launch) ===== -->
+  <div id="rocketHud" class="hidden">
+    <span class="rkt-ic">🚀</span>
+    <div class="rkt-info">
+      <div class="rkt-line"><span id="rktProg">day 0 / 259 to Mars</span><span id="rktFactor">⏩ —</span></div>
+      <div class="rkt-bar"><i id="rktBar"></i></div>
+    </div>
+  </div>
+
   <!-- libs (vendored locally — MV3 blocks remote scripts) -->
   <script src="lib/three.min.js"></script>
   <script src="lib/OrbitControls.js"></script>
   <!-- app -->
-  <script src="js/astro.js?v=2"></script>
-  <script src="js/scene.js?v=2"></script>
-  <script src="js/app.js?v=2"></script>
+  <script src="js/astro.js?v=3"></script>
+  <script src="js/scene.js?v=3"></script>
+  <script src="js/app.js?v=3"></script>
 </body>
 </html>

@@ -19,8 +19,10 @@
     playDir: 1,           // ping-pong direction
     dir: 'E2M',           // message direction
     mission: null,        // active rocket flight
-    message: null         // active in-flight message
+    messages: []          // in-flight messages (real-time, concurrent, both directions)
   };
+  let msgSeq = 0;
+  const MAX_MSGS = 8;
 
   /* ---- boot ---------------------------------------------------------------- */
   function boot() {
@@ -30,6 +32,7 @@
     onDSNChange(Math.max(0, S.activeDSN));   // apply initial highlight (first frame ran before wiring)
     paintTimelineHeatmap();
     wireControls();
+    updateFactorHint();
     setDate(state.date);
     $('introDate').textContent = A.fmtDate(state.date);
     requestAnimationFrame(loop);
@@ -64,7 +67,7 @@
     // DSN rate + message hint
     state._rate = s.dataRateMbps;
     updateDSNRate();
-    $('msgHint').textContent = 'arrives in ' + A.fmtDuration(s.lightSecOneWay);
+    $('msgHint').textContent = A.fmtDuration(s.lightSecOneWay) + ' each way · real time';
   }
 
   function relLabel(date) {
@@ -81,11 +84,11 @@
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
 
     if (state.mission) {
-      const p = (now - state.mission.t0) / state.mission.durMs;
-      const prog = Math.min(1, p);
+      const prog = Math.min(1, (now - state.mission.t0) / state.mission.durMs);
       const dms = state.mission.launchMs + (state.mission.arriveMs - state.mission.launchMs) * prog;
       setDate(new Date(dms));
       S.setRocket(prog);
+      updateRocketHud(prog);
       if (prog >= 1) endMission();
     } else if (state.playing) {
       let off = (state.date.getTime() - TODAY.getTime()) / DAY;
@@ -95,7 +98,7 @@
       setDate(new Date(TODAY.getTime() + off * DAY));
     }
 
-    if (state.message) tickMessage(now);
+    if (state.messages.length) tickMessages(now);
 
     requestAnimationFrame(loop);
   }
@@ -110,6 +113,7 @@
     $('todayBtn').addEventListener('click', () => { stopPlay(); setDate(new Date(TODAY.getTime())); toast('Back to today'); });
     $('playBtn').addEventListener('click', togglePlay);
     $('speedSel').addEventListener('change', (e) => { state.speed = +e.target.value; });
+    $('rocketDur').addEventListener('change', updateFactorHint);
     $('launchBtn').addEventListener('click', launchRocket);
 
     // message direction
@@ -155,67 +159,89 @@
     if (state.mission) return;
     stopPlay();
     S.showAim(false);
+    const durSec = +($('rocketDur').value) || 30;
+    const factor = (A.HOHMANN_DAYS * 86400) / durSec;     // ×real-time
     const info = S.beginRocket(state.date);
     state.mission = {
       t0: performance.now(),
-      durMs: 15000,
+      durMs: durSec * 1000,
       launchMs: info.launchDate.getTime(),
       arriveMs: info.arrivalDate.getTime()
     };
     $('launchBtn').disabled = true;
     $('launchBtn').textContent = '🚀 In flight…';
-    toast('Rocket launched — aiming for where Mars will be in ' + A.fmtDays(A.HOHMANN_DAYS));
+    $('rocketDur').disabled = true;
+    $('rktFactor').textContent = '⏩ ' + fmtFactor(factor) + ' real time';
+    $('rocketHud').classList.remove('hidden');
+    updateRocketHud(0);
+    toast('🚀 Launched at ' + fmtFactor(factor) + ' real time — a ' + A.fmtDays(A.HOHMANN_DAYS) +
+          ' trip squeezed into ' + durSec + ' s. Watch it aim ahead of Mars.');
   }
   function endMission() {
     state.mission = null;
     S.setRocket(1);
     S.endRocket(true);          // keep the trajectory drawn
     S.showAim(true);
+    updateRocketHud(1);
+    setTimeout(() => $('rocketHud').classList.add('hidden'), 2600);
     $('launchBtn').disabled = false;
     $('launchBtn').textContent = '🚀 Launch rocket';
+    $('rocketDur').disabled = false;
     toast('🛬 Arrival! The rocket met Mars after ' + A.fmtDays(A.HOHMANN_DAYS) + ' — see how far Mars travelled.');
+  }
+  function updateRocketHud(prog) {
+    $('rktProg').textContent = 'day ' + Math.round(A.HOHMANN_DAYS * prog) + ' / ' + A.HOHMANN_DAYS + ' to Mars';
+    $('rktBar').style.width = (prog * 100) + '%';
+  }
+  function fmtFactor(n) {
+    return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M×'
+                    : Math.round(n / 1000) + 'k×';
+  }
+  function updateFactorHint() {
+    const durSec = +($('rocketDur').value) || 30;
+    $('rktFactorHint').textContent = '≈' + fmtFactor((A.HOHMANN_DAYS * 86400) / durSec);
   }
 
   /* ---- messaging ----------------------------------------------------------- */
   function sendMessage() {
-    if (state.message) { toast('A message is already in flight…'); return; }
     const txt = $('msgInput').value.trim();
     if (!txt) { $('msgInput').focus(); return; }
-    const s = A.snapshot(state.date);
-    const lightSec = s.lightSecOneWay;
+    if (state.messages.length >= MAX_MSGS) { toast('Let some messages arrive first…'); return; }
+    const lightSec = A.snapshot(state.date).lightSecOneWay;
     const dir = state.dir;
+    const id = ++msgSeq;
 
-    // wall-clock time-lapse: real delay compressed to 4–11 s
-    const durMs = 4000 + Math.min(1, lightSec / 1320) * 7000;
-
+    // REAL TIME: the photon travels for the full one-way light delay.
+    const durMs = lightSec * 1000;
     const bubble = makeBubble(dir, txt, lightSec);
     $('msgLog').prepend(bubble.el);
 
-    state.message = { dir, t0: performance.now(), durMs, lightSec, bubble, txt };
-    S.setMessage(dir, 0);
-    $('sendBtn').disabled = true;
+    S.addPhoton(id, dir);
+    S.setPhoton(id, 0);
+    state.messages.push({ id, dir, t0: performance.now(), durMs, lightSec, bubble, txt });
     $('msgInput').value = '';
+    toast('🛰️ Transmitting in real time — ' + A.fmtDuration(lightSec) + ' to cross the void');
   }
 
-  function tickMessage(now) {
-    const m = state.message;
-    const prog = Math.min(1, (now - m.t0) / m.durMs);
-    S.setMessage(m.dir, prog);
-    const elapsed = prog * m.lightSec;
-    m.bubble.clock.textContent = mmss(elapsed) + ' / ' + mmss(m.lightSec);
-    m.bubble.bar.style.width = (prog * 100) + '%';
-    if (prog >= 1) deliverMessage();
+  function tickMessages(now) {
+    for (let i = state.messages.length - 1; i >= 0; i--) {
+      const m = state.messages[i];
+      const prog = Math.min(1, (now - m.t0) / m.durMs);
+      S.setPhoton(m.id, prog);
+      const elapsed = prog * m.lightSec;
+      m.bubble.clock.textContent = mmss(elapsed) + ' / ' + mmss(m.lightSec);
+      m.bubble.bar.style.width = (prog * 100) + '%';
+      if (prog >= 1) { deliverMessage(m); state.messages.splice(i, 1); }
+    }
   }
 
-  function deliverMessage() {
-    const m = state.message;
-    S.setMessage(m.dir, null);
+  function deliverMessage(m) {
+    S.removePhoton(m.id);
     m.bubble.el.classList.remove('flight');
     m.bubble.meta.innerHTML = dirLabel(m.dir) + ' · <span class="ok">delivered</span>';
-    m.bubble.clockWrap.innerHTML = '✓ took ' + A.fmtDuration(m.lightSec);
-    state.message = null;
-    $('sendBtn').disabled = false;
-    toast('📨 Message delivered after ' + A.fmtDuration(m.lightSec));
+    m.bubble.clockWrap.innerHTML = '✓ took ' + A.fmtDuration(m.lightSec) + ' (real time)';
+    toast('📨 ' + (m.dir === 'E2M' ? 'Mars received your message' : 'Earth received the message') +
+          ' after ' + A.fmtDuration(m.lightSec));
   }
 
   function makeBubble(dir, txt, lightSec) {

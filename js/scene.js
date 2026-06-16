@@ -22,7 +22,7 @@
   let distLine, aimLine, ghostMars, ghostLabel;
   let dsnGroup, dsnDots = [], earthSpin = 0;
   let rocket, rocketTrail, rocketPlan, rocketCurve = null, rocketActive = false, rocketT = 0;
-  let photon, photonGlow;
+  const photons = new Map();   // id -> { dir, mesh, glow, trail }
   let curDate = new Date();
   let _activeDSN = -1;
 
@@ -99,7 +99,6 @@
     buildLines();
     buildDSN();
     buildRocket();
-    buildPhoton();
 
     addEventListener('resize', onResize);
     update(curDate);
@@ -222,15 +221,34 @@
     scene.add(rocketPlan);
   }
 
-  function buildPhoton() {
-    photon = new THREE.Mesh(
-      new THREE.SphereGeometry(0.7, 12, 12),
-      new THREE.MeshBasicMaterial({ color: 0xffffff })
-    );
-    photonGlow = radialSprite(COL.light, 9, 1);
-    photon.add(photonGlow);
-    photon.visible = false;
-    scene.add(photon);
+  // Each in-flight message is its own photon (so several can cross at once,
+  // in both directions). dir: 'E2M' Earth→Mars, 'M2E' Mars→Earth.
+  function addPhoton(id, dir) {
+    const col = dir === 'E2M' ? 0x9fd0ff : 0xffb59a;
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.85, 12, 12),
+      new THREE.MeshBasicMaterial({ color: col }));
+    const glow = radialSprite(col, 11, 1);
+    mesh.add(glow);
+    const trail = new THREE.Line(new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.45 }));
+    trail.renderOrder = 4;
+    scene.add(mesh); scene.add(trail);
+    photons.set(id, { dir, mesh, glow, trail });
+  }
+  function setPhoton(id, t) {
+    const p = photons.get(id); if (!p) return;
+    const e = bodies.Earth.mesh.position, m = bodies.Mars.mesh.position;
+    const from = p.dir === 'E2M' ? e : m, to = p.dir === 'E2M' ? m : e;
+    const cur = new THREE.Vector3().lerpVectors(from, to, Math.max(0, Math.min(1, t)));
+    p.mesh.position.copy(cur);
+    p.trail.geometry.setFromPoints([from, cur]);   // comet trail from source
+  }
+  function removePhoton(id) {
+    const p = photons.get(id); if (!p) return;
+    scene.remove(p.mesh); scene.remove(p.trail);
+    p.mesh.geometry.dispose(); p.mesh.material.dispose();
+    p.trail.geometry.dispose(); p.trail.material.dispose();
+    photons.delete(id);
   }
 
   /* ---- per-date update (positions of everything that depends on the date) -- */
@@ -275,7 +293,8 @@
     // pulse the light path
     if (distLine) distLine.material.opacity = 0.65 + 0.3 * Math.sin(t * 2.2);
 
-    // billboards: keep ghost label facing camera handled by Sprite automatically
+    // pulse in-flight message photons so they read as "alive"
+    photons.forEach(p => { p.glow.material.opacity = 0.6 + 0.4 * Math.abs(Math.sin(t * 3)); });
 
     renderer.render(scene, camera);
   }
@@ -358,20 +377,6 @@
     }
   }
 
-  /* ---- message photon ------------------------------------------------------ */
-  // dir: 'E2M' Earth→Mars or 'M2E' Mars→Earth ; t in [0,1]; t=null hides.
-  function setMessage(dir, t) {
-    if (t == null) { photon.visible = false; return; }
-    const e = bodies.Earth.mesh.position, m = bodies.Mars.mesh.position;
-    const from = dir === 'E2M' ? e : m;
-    const to   = dir === 'E2M' ? m : e;
-    photon.visible = true;
-    photon.position.lerpVectors(from, to, Math.max(0, Math.min(1, t)));
-    const col = dir === 'E2M' ? 0x9fd0ff : 0xffb59a;
-    photon.material.color.set(col);
-    photonGlow.material.color.set(col);
-  }
-
   /* ---- camera helpers ------------------------------------------------------ */
   function resetView() {
     animateCamera(new THREE.Vector3(36, 132, 150), new THREE.Vector3(0, 0, 0));
@@ -407,7 +412,7 @@
   const Scene = {
     init, update,
     beginRocket, setRocket, endRocket,
-    setMessage,
+    addPhoton, setPhoton, removePhoton,
     resetView, focusEarthMars,
     showAim(v){ aimLine.visible = v; ghostMars.visible = v; ghostLabel.visible = v; },
     onDSNChange: null,
