@@ -125,18 +125,13 @@
   }
 
   function buildStarfield() {
-    const N = 2600, pos = new Float32Array(N * 3);
-    // deterministic scatter (no Math.random dependency for reproducibility)
-    for (let i = 0; i < N; i++) {
-      const a = i * 2.39996323, r = 1400 + ((i * 97) % 600);
-      const y = 1 - (i / N) * 2, rad = Math.sqrt(1 - y * y);
-      pos[i*3]   = Math.cos(a) * rad * r;
-      pos[i*3+1] = y * r;
-      pos[i*3+2] = Math.sin(a) * rad * r;
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    starfield = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xaecbff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0.8 }));
+    // Real Milky Way star map (NASA-derived) on a giant inward-facing sphere —
+    // a true night sky with the galactic band, replacing the procedural dots.
+    const mat = new THREE.MeshBasicMaterial({ map: loadTex('stars_milky_way'), side: THREE.BackSide, depthWrite: false });
+    mat.color.setScalar(0.72);                 // gently dim so the planets stay the focus
+    starfield = new THREE.Mesh(new THREE.SphereGeometry(5000, 60, 40), mat);
+    starfield.raycast = () => {};
+    starfield.renderOrder = -1;
     scene.add(starfield);
   }
 
