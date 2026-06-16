@@ -22,7 +22,7 @@
     messages: []          // in-flight messages (real-time, concurrent, both directions)
   };
   let msgSeq = 0;
-  const MAX_MSGS = 8;
+  const MAX_MSGS = 99;   // effectively unlimited — send as many as you like
 
   /* ---- boot ---------------------------------------------------------------- */
   function boot() {
@@ -68,6 +68,7 @@
     state._rate = s.dataRateMbps;
     updateDSNRate();
     $('msgHint').textContent = A.fmtDuration(s.lightSecOneWay) + ' each way · real time';
+    updateFactorHint();
   }
 
   function relLabel(date) {
@@ -98,7 +99,7 @@
       setDate(new Date(TODAY.getTime() + off * DAY));
     }
 
-    if (state.messages.length) tickMessages(now);
+    if (state.messages.length) { if (state.mission) flushMessages(); else tickMessages(now); }
 
     requestAnimationFrame(loop);
   }
@@ -160,24 +161,27 @@
     stopPlay();
     S.showAim(false);
     const durSec = +($('rocketDur').value) || 30;
-    const factor = (A.HOHMANN_DAYS * 86400) / durSec;     // ×real-time
     const info = S.beginRocket(state.date);
+    const factor = (info.tofDays * 86400) / durSec;       // ×real-time
     state.mission = {
       t0: performance.now(),
       durMs: durSec * 1000,
       launchMs: info.launchDate.getTime(),
-      arriveMs: info.arrivalDate.getTime()
+      arriveMs: info.arrivalDate.getTime(),
+      tofN: Math.round(info.tofDays)
     };
+    flushMessages();                                       // time is about to skip months
     $('launchBtn').disabled = true;
     $('launchBtn').textContent = '🚀 In flight…';
     $('rocketDur').disabled = true;
     $('rktFactor').textContent = '⏩ ' + fmtFactor(factor) + ' real time';
     $('rocketHud').classList.remove('hidden');
     updateRocketHud(0);
-    toast('🚀 Launched at ' + fmtFactor(factor) + ' real time — a ' + A.fmtDays(A.HOHMANN_DAYS) +
-          ' trip squeezed into ' + durSec + ' s. Watch it aim ahead of Mars.');
+    toast('🚀 Launched at ' + fmtFactor(factor) + ' real time — a ' + A.fmtDays(info.tofDays) +
+          ' transfer in ' + durSec + ' s. Watch it aim ahead of Mars.');
   }
   function endMission() {
+    const tof = state.mission ? state.mission.tofN : A.HOHMANN_DAYS;
     state.mission = null;
     S.setRocket(1);
     S.endRocket(true);          // keep the trajectory drawn
@@ -187,10 +191,11 @@
     $('launchBtn').disabled = false;
     $('launchBtn').textContent = '🚀 Launch rocket';
     $('rocketDur').disabled = false;
-    toast('🛬 Arrival! The rocket met Mars after ' + A.fmtDays(A.HOHMANN_DAYS) + ' — see how far Mars travelled.');
+    toast('🛬 Arrival! The rocket met Mars after ' + A.fmtDays(tof) + ' — see how far Mars travelled.');
   }
   function updateRocketHud(prog) {
-    $('rktProg').textContent = 'day ' + Math.round(A.HOHMANN_DAYS * prog) + ' / ' + A.HOHMANN_DAYS + ' to Mars';
+    const N = state.mission ? state.mission.tofN : A.HOHMANN_DAYS;
+    $('rktProg').textContent = 'day ' + Math.round(N * prog) + ' / ' + N + ' to Mars';
     $('rktBar').style.width = (prog * 100) + '%';
   }
   function fmtFactor(n) {
@@ -199,7 +204,8 @@
   }
   function updateFactorHint() {
     const durSec = +($('rocketDur').value) || 30;
-    $('rktFactorHint').textContent = '≈' + fmtFactor((A.HOHMANN_DAYS * 86400) / durSec);
+    const tof = A.hohmann(state.date).days;
+    $('rktFactorHint').textContent = '≈' + fmtFactor((tof * 86400) / durSec);
   }
 
   /* ---- messaging ----------------------------------------------------------- */
@@ -235,13 +241,23 @@
     }
   }
 
-  function deliverMessage(m) {
+  function deliverMessage(m, silent) {
     S.removePhoton(m.id);
     m.bubble.el.classList.remove('flight');
     m.bubble.meta.innerHTML = dirLabel(m.dir) + ' · <span class="ok">delivered</span>';
-    m.bubble.clockWrap.innerHTML = '✓ took ' + A.fmtDuration(m.lightSec) + ' (real time)';
-    toast('📨 ' + (m.dir === 'E2M' ? 'Mars received your message' : 'Earth received the message') +
+    m.bubble.clockWrap.innerHTML = silent
+      ? '✓ delivered (time sped up)'
+      : '✓ took ' + A.fmtDuration(m.lightSec) + ' (real time)';
+    if (!silent) toast('📨 ' + (m.dir === 'E2M' ? 'Mars received your message' : 'Earth received the message') +
           ' after ' + A.fmtDuration(m.lightSec));
+  }
+
+  // When a rocket sim fast-forwards months, any in-flight message has long
+  // since arrived — deliver them all at once.
+  function flushMessages() {
+    if (!state.messages.length) return;
+    state.messages.forEach(m => deliverMessage(m, true));
+    state.messages.length = 0;
   }
 
   function makeBubble(dir, txt, lightSec) {

@@ -165,6 +165,7 @@
     const dAU   = distanceAU(earth, mars);
     const dKM   = dAU * AU_KM;
     const lightOneWay = dKM / C_KMS;                 // seconds
+    const hh    = hohmann(date).days;                // per-date Hohmann transfer time
     return {
       date:            new Date(date.getTime()),
       earth, mars,
@@ -173,10 +174,10 @@
       lightSecOneWay:  lightOneWay,
       lightSecRound:   lightOneWay * 2,
       dataRateMbps:    dataRate(dAU),
-      rocketDays:      HOHMANN_DAYS,
+      rocketDays:      hh,
       rocketStraightDays: dKM / (ROCKET_KMS * 86400),
       lightLeadRad:    leadAngle(date, lightOneWay / 86400),  // tiny
-      rocketLeadRad:   leadAngle(date, HOHMANN_DAYS)          // large
+      rocketLeadRad:   leadAngle(date, hh)                    // large
     };
   }
 
@@ -212,12 +213,108 @@
     return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
+  /* ========================================================================
+     Two-body orbital mechanics — accurate Earth→Mars transfer.
+     Units: AU, days. μ_sun = k² (Gaussian gravitational constant squared).
+     ====================================================================== */
+  const MU_SUN = 2.959122082855911e-4;   // AU³ / day²
+
+  const vadd   = (a, b) => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
+  const vsub   = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+  const vscale = (a, s) => ({ x: a.x * s, y: a.y * s, z: a.z * s });
+  const vdot   = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+  const vcross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
+  const vmag   = (a) => Math.sqrt(vdot(a, a));
+
+  // Stumpff functions C(ψ), S(ψ).
+  function stumpff(psi) {
+    if (psi > 1e-6) { const s = Math.sqrt(psi); return [(1 - Math.cos(s)) / psi, (s - Math.sin(s)) / (s * psi)]; }
+    if (psi < -1e-6) { const s = Math.sqrt(-psi); return [(1 - Math.cosh(s)) / psi, (Math.sinh(s) - s) / Math.sqrt(-psi * -psi * -psi)]; }
+    return [0.5, 1 / 6];
+  }
+
+  // Universal-variable Kepler propagation of state (r0,v0) forward dt days.
+  function keplerProp(r0, v0, dt) {
+    const sqmu = Math.sqrt(MU_SUN);
+    const r0m = vmag(r0), v0m = vmag(v0), rdotv = vdot(r0, v0);
+    const alpha = -v0m * v0m / MU_SUN + 2 / r0m;          // 1/a
+    let chi = sqmu * dt * alpha;                          // elliptic initial guess
+    if (!isFinite(chi)) chi = sqmu * Math.abs(dt) / r0m;
+    let r = r0m, c2 = 0.5, c3 = 1 / 6;
+    for (let i = 0; i < 80; i++) {
+      const psi = chi * chi * alpha;
+      [c2, c3] = stumpff(psi);
+      r = chi * chi * c2 + (rdotv / sqmu) * chi * (1 - psi * c3) + r0m * (1 - psi * c2);
+      const dchi = (sqmu * dt - chi * chi * chi * c3 - (rdotv / sqmu) * chi * chi * c2 - r0m * chi * (1 - psi * c3)) / r;
+      chi += dchi;
+      if (Math.abs(dchi) < 1e-9) break;
+    }
+    const f = 1 - (chi * chi / r0m) * c2;
+    const g = dt - (chi * chi * chi / sqmu) * c3;
+    return vadd(vscale(r0, f), vscale(v0, g));            // position only
+  }
+
+  // Lambert solver (universal variables, single revolution, prograde short way).
+  // Returns departure velocity v1 (AU/day), or null on failure.
+  function lambert(r1, r2, tof) {
+    const sqmu = Math.sqrt(MU_SUN);
+    const r1m = vmag(r1), r2m = vmag(r2);
+    let cosdnu = Math.min(1, Math.max(-1, vdot(r1, r2) / (r1m * r2m)));
+    const tm = (vcross(r1, r2).z >= 0) ? 1 : -1;          // prograde (+z angular momentum)
+    const A = tm * Math.sqrt(r1m * r2m * (1 + cosdnu));
+    if (A === 0) return null;
+    let psi = 0, c2 = 0.5, c3 = 1 / 6, psiUp = 4 * Math.PI * Math.PI, psiLow = -4 * Math.PI;
+    let y = r1m + r2m, chi, dtCalc;
+    for (let i = 0; i < 300; i++) {
+      y = r1m + r2m + A * (psi * c3 - 1) / Math.sqrt(c2);
+      if (A > 0 && y < 0) {
+        let k = 0;
+        while (y < 0 && k < 60) { psiLow += Math.PI; psi = (psiUp + psiLow) / 2; [c2, c3] = stumpff(psi); y = r1m + r2m + A * (psi * c3 - 1) / Math.sqrt(c2); k++; }
+      }
+      chi = Math.sqrt(y / c2);
+      dtCalc = (chi * chi * chi * c3 + A * Math.sqrt(y)) / sqmu;
+      if (Math.abs(dtCalc - tof) < 1e-6) break;
+      if (dtCalc <= tof) psiLow = psi; else psiUp = psi;
+      psi = (psiUp + psiLow) / 2;
+      [c2, c3] = stumpff(psi);
+    }
+    const f = 1 - y / r1m, g = A * Math.sqrt(y / MU_SUN);
+    if (g === 0 || !isFinite(g)) return null;
+    return vscale(vsub(r2, vscale(r1, f)), 1 / g);
+  }
+
+  // Per-date Hohmann transfer time from the ACTUAL heliocentric radii (varies
+  // ~250–280 d over the eccentric orbits). Returns { aT, days }.
+  function hohmann(date) {
+    const rE = vmag(heliocentric('Earth', date));
+    const rM = vmag(heliocentric('Mars', date));
+    const aT = (rE + rM) / 2;
+    return { aT, days: Math.PI * Math.sqrt(aT * aT * aT / MU_SUN) };
+  }
+
+  // Build the real transfer leaving Earth at `date`. Time of flight from the
+  // per-date Hohmann; Lambert-solved to Mars' true position at arrival, so the
+  // rocket genuinely intercepts. posAt(frac) gives the heliocentric position
+  // (AU) at fraction frac of the flight by Kepler-propagating the solved orbit.
+  function transfer(date) {
+    const r1 = heliocentric('Earth', date);
+    const tof = hohmann(date).days;
+    const r2 = heliocentric('Mars', addDays(date, tof));
+    const v1 = lambert(r1, r2, tof);
+    if (!v1 || !isFinite(v1.x) || !isFinite(v1.y) || !isFinite(v1.z)) return null;
+    return {
+      tofDays: tof, r1, r2, v1,
+      posAt: (frac) => frac <= 0 ? r1 : (frac >= 1 ? r2 : keplerProp(r1, v1, frac * tof))
+    };
+  }
+
   /* ---- Public API ---------------------------------------------------------- */
   global.Astro = {
-    AU_KM, C_KMS, J2000, DAY_MS, HOHMANN_DAYS, ROCKET_KMS,
+    AU_KM, C_KMS, J2000, DAY_MS, HOHMANN_DAYS, ROCKET_KMS, MU_SUN,
     PLANETS, DSN, ELEMENTS,
     julianDate, heliocentric, distanceAU, orbitPath,
     addDays, snapshot, dataRate, leadAngle,
+    hohmann, transfer, keplerProp, lambert,
     fmtDuration, fmtDays, fmtKM, fmtRate, fmtDate
   };
 })(typeof window !== 'undefined' ? window : this);
