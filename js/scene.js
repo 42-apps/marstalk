@@ -27,6 +27,8 @@
   const ENV_SIZE = 6;          // world-size of the flying envelopes
   let curDate = new Date();
   let _activeDSN = -1;
+  const raycaster = new THREE.Raycaster();
+  const pointerNDC = new THREE.Vector2();
 
   const COL = {
     light: 0x6fe3ff, aim: 0xffcf5a, rocket: 0x8cff9e,
@@ -53,6 +55,7 @@
     const h = sizeU || 4.4;
     sp.scale.set(h * c.width / c.height, h, 1);
     sp.renderOrder = 20;
+    sp.raycast = () => {};      // labels aren't hover targets
     return sp;
   }
 
@@ -69,6 +72,7 @@
       map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: opacity == null ? 1 : opacity
     }));
     sp.scale.set(sizeU, sizeU, 1);
+    sp.raycast = () => {};      // glow sprites aren't hover targets
     return sp;
   }
 
@@ -102,6 +106,8 @@
     buildDSN();
     buildRocket();
 
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerleave', () => { if (Scene.onHover) Scene.onHover(null); renderer.domElement.style.cursor = 'default'; });
     addEventListener('resize', onResize);
     update(curDate);
     animate();
@@ -129,6 +135,7 @@
       new THREE.MeshBasicMaterial({ color: COL.sun })
     );
     scene.add(sun);
+    sun.userData.hoverKey = 'Sun';
     sun.add(radialSprite(COL.sun, 34, 0.9));
     sun.add(radialSprite(0xffae40, 60, 0.35));
     const lbl = makeLabel('Sun', 0xffd27a, 3.6); lbl.position.y = 8.5; sun.add(lbl);
@@ -141,6 +148,7 @@
         color: p.color, emissive: p.color, emissiveIntensity: 0.18, roughness: 0.85, metalness: 0.0
       });
       const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 28, 28), mat);
+      mesh.userData.hoverKey = p.name;
       scene.add(mesh);
       const big = (p.name === 'Earth' || p.name === 'Mars');
       const label = makeLabel(p.name, p.color === 0x4a90e2 ? 0x7db6ff : p.color, big ? 4.6 : 3.4);
@@ -208,6 +216,7 @@
   // Modelled with the nose toward +Y; setRocket() orients it along the velocity.
   function buildRocket() {
     rocket = new THREE.Group();
+    rocket.userData.hoverKey = 'rocket';
     const hull = new THREE.MeshStandardMaterial({ color: 0xdde3ec, metalness: 0.62, roughness: 0.33, emissive: 0x3a4150, emissiveIntensity: 0.5 });
     const fin  = new THREE.MeshStandardMaterial({ color: 0x99a2b1, metalness: 0.45, roughness: 0.5 });
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2.8, 24), hull);
@@ -270,7 +279,7 @@
   // both directions, spread laterally around the line so they don't stack up.
   function addPhoton(id, dir) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: envelopeTexture(dir), transparent: true, depthTest: false, depthWrite: false }));
-    sprite.scale.set(ENV_SIZE, ENV_SIZE, 1); sprite.renderOrder = 22;
+    sprite.scale.set(ENV_SIZE, ENV_SIZE, 1); sprite.renderOrder = 22; sprite.raycast = () => {};
     const col = dir === 'E2M' ? 0x9fd0ff : 0xffb59a;
     const trail = new THREE.Line(new THREE.BufferGeometry(),
       new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.4 }));
@@ -461,6 +470,23 @@
     step();
   }
 
+  // hover detection → reports a hover key ('Sun' | planet name | 'rocket') + cursor pos
+  function onPointerMove(e) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const w = rect.width || innerWidth, h = rect.height || innerHeight;   // robust if rect is 0×0
+    pointerNDC.x = ((e.clientX - rect.left) / w) * 2 - 1;
+    pointerNDC.y = -((e.clientY - rect.top) / h) * 2 + 1;
+    raycaster.setFromCamera(pointerNDC, camera);
+    const targets = A.PLANETS.map(p => bodies[p.name].mesh);
+    targets.push(sun);
+    if (rocket.visible) targets.push(rocket);
+    const hits = raycaster.intersectObjects(targets, true);
+    let key = null;
+    if (hits.length) { let o = hits[0].object; while (o && !(o.userData && o.userData.hoverKey)) o = o.parent; if (o) key = o.userData.hoverKey; }
+    renderer.domElement.style.cursor = key ? 'pointer' : 'default';
+    if (Scene.onHover) Scene.onHover(key, e.clientX, e.clientY);
+  }
+
   function onResize() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -475,6 +501,8 @@
     resetView, focusEarthMars,
     showAim(v){ aimLine.visible = v; ghostMars.visible = v; ghostLabel.visible = v; },
     onDSNChange: null,
+    onHover: null,
+    rocketSpeed: () => rocketTransfer ? rocketTransfer.speedAt(rocketT) : null,
     get activeDSN(){ return _activeDSN; },
     earthPos(){ return bodies.Earth.mesh.position.clone(); },
     marsPos(){ return bodies.Mars.mesh.position.clone(); }

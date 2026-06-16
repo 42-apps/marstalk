@@ -46,12 +46,29 @@
 
   /* ---- Visual metadata for each body (sizes are exaggerated for legibility) */
   const PLANETS = [
-    { name: 'Mercury', color: 0x9c8b7a, vsize: 0.55, radiusKm: 2440 },
-    { name: 'Venus',   color: 0xe3b873, vsize: 0.95, radiusKm: 6052 },
-    { name: 'Earth',   color: 0x4a90e2, vsize: 1.00, radiusKm: 6371 },
-    { name: 'Mars',    color: 0xe0623a, vsize: 0.78, radiusKm: 3390 },
-    { name: 'Jupiter', color: 0xd7b48a, vsize: 2.60, radiusKm: 69911 }
+    { name: 'Mercury', color: 0x9c8b7a, vsize: 0.55, radiusKm: 2440,  dayH: 1407.6, moons: 0,  blurb: 'Smallest planet — scorching days, frozen nights, almost no atmosphere.' },
+    { name: 'Venus',   color: 0xe3b873, vsize: 0.95, radiusKm: 6052,  dayH: 5832.5, moons: 0,  blurb: 'Runaway greenhouse — a crushing CO₂ sky and the hottest surface in the system (~465 °C).' },
+    { name: 'Earth',   color: 0x4a90e2, vsize: 1.00, radiusKm: 6371,  dayH: 24.0,   moons: 1,  blurb: 'Our pale blue dot — the only world known to harbour life.' },
+    { name: 'Mars',    color: 0xe0623a, vsize: 0.78, radiusKm: 3390,  dayH: 24.6,   moons: 2,  blurb: 'The red planet — thin CO₂ air, planet-wide dust storms, two tiny moons. Our destination.' },
+    { name: 'Jupiter', color: 0xd7b48a, vsize: 2.60, radiusKm: 69911, dayH: 9.9,    moons: 95, blurb: 'King of planets — a giant ball of gas with a centuries-old storm, the Great Red Spot.' }
   ];
+
+  // Hover facts for the Sun + projected SpaceX Starship (Mars) specs.
+  const SUN_FACT = { name: 'The Sun', radiusKm: 696340, blurb: 'A G-type star with ~99.86% of the solar system’s mass. Its light reaches Earth in ~8 min 20 s.' };
+  const STARSHIP = {
+    name: 'SpaceX Starship — Mars',
+    rows: [
+      ['Height', '~121 m stack (50 m ship + 71 m booster)'],
+      ['Diameter', '9 m'],
+      ['Engines', '6 Raptor (ship) + 33 Raptor (booster)'],
+      ['Cycle', 'full-flow staged combustion'],
+      ['Propellant', 'liquid methane + oxygen (CH₄/LOX) — makeable on Mars'],
+      ['Liftoff thrust', '~74 MN (≈7,500 t)'],
+      ['Payload', '~100–150 t to orbit · ~100 t to Mars (refuelled in orbit)'],
+      ['Crew', 'up to ~100 people per flight (long-term goal)']
+    ],
+    note: 'Projected / aspirational SpaceX figures — still in development.'
+  };
 
   /* ---- Deep Space Network ground complexes (~120° apart in longitude) ------
      One 70 m dish at each site; together they give continuous sky coverage
@@ -218,6 +235,7 @@
      Units: AU, days. μ_sun = k² (Gaussian gravitational constant squared).
      ====================================================================== */
   const MU_SUN = 2.959122082855911e-4;   // AU³ / day²
+  const AUDAY_KMS = AU_KM / 86400;        // 1 AU/day in km/s
 
   const vadd   = (a, b) => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
   const vsub   = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
@@ -305,9 +323,12 @@
     const lam = lambert(r1, r2, tof);
     if (!lam || !isFinite(lam.v1.x) || !isFinite(lam.v1.y) || !isFinite(lam.v1.z)) return null;
     const v1 = lam.v1;
+    const aT = 1 / (2 / vmag(r1) - vmag(v1) * vmag(v1) / MU_SUN);   // transfer semi-major axis
+    const posAt = (frac) => frac <= 0 ? r1 : (frac >= 1 ? r2 : keplerProp(r1, v1, frac * tof));
     return {
-      tofDays: tof, r1, r2, v1,
-      posAt: (frac) => frac <= 0 ? r1 : (frac >= 1 ? r2 : keplerProp(r1, v1, frac * tof))
+      tofDays: tof, r1, r2, v1, a: aT, posAt,
+      // instantaneous heliocentric speed (km/s) via vis-viva: v² = μ(2/r − 1/a)
+      speedAt: (frac) => { const p = posAt(frac); const r = Math.sqrt(p.x*p.x + p.y*p.y + p.z*p.z); return Math.sqrt(MU_SUN * (2 / r - 1 / aT)) * AUDAY_KMS; }
     };
   }
 
@@ -315,7 +336,6 @@
      For each candidate launch date we Lambert-solve a Hohmann-duration transfer
      and total the heliocentric Δv (departure rel. Earth + arrival rel. Mars).
      Real windows are the local minima of that Δv (they recur ~every 26 mo).   */
-  const AUDAY_KMS = AU_KM / 86400;            // 1 AU/day in km/s
   function planetVel(name, date) {
     const dt = 0.5;
     return vscale(vsub(heliocentric(name, addDays(date, dt)), heliocentric(name, addDays(date, -dt))), 1 / (2 * dt));
@@ -355,7 +375,7 @@
   /* ---- Public API ---------------------------------------------------------- */
   global.Astro = {
     AU_KM, C_KMS, J2000, DAY_MS, HOHMANN_DAYS, ROCKET_KMS, MU_SUN,
-    PLANETS, DSN, ELEMENTS,
+    PLANETS, DSN, ELEMENTS, SUN_FACT, STARSHIP,
     julianDate, heliocentric, distanceAU, orbitPath,
     addDays, snapshot, dataRate, leadAngle,
     hohmann, transfer, keplerProp, lambert, launchWindows,

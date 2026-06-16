@@ -29,6 +29,7 @@
     S.init($('stage'));
     buildDSNPanel();
     S.onDSNChange = onDSNChange;
+    S.onHover = handleHover;
     onDSNChange(Math.max(0, S.activeDSN));   // apply initial highlight (first frame ran before wiring)
     paintTimelineHeatmap();
     wireControls();
@@ -200,6 +201,10 @@
     const N = state.mission ? state.mission.tofN : A.HOHMANN_DAYS;
     $('rktProg').textContent = 'day ' + Math.round(N * prog) + ' / ' + N + ' to Mars';
     $('rktBar').style.width = (prog * 100) + '%';
+    const sp = S.rocketSpeed();
+    $('rktSpeed').textContent = sp
+      ? '🚀 ' + sp.toFixed(1) + ' km/s · 1/' + Math.round(A.C_KMS / sp).toLocaleString() + ' of light speed'
+      : '';
   }
   function fmtFactor(n) {
     return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M×'
@@ -329,6 +334,57 @@
     const ar=(a>>16)&255, ag=(a>>8)&255, ab=a&255, br=(b>>16)&255, bg=(b>>8)&255, bb=b&255;
     const r=Math.round(ar+(br-ar)*t), g=Math.round(ag+(bg-ag)*t), bl=Math.round(ab+(bb-ab)*t);
     return 'rgb(' + r + ',' + g + ',' + bl + ')';
+  }
+
+  /* ---- hover tooltips (planets / Sun / rocket) ----------------------------- */
+  let lastHoverKey = null;
+  function handleHover(key, x, y) {
+    const tip = $('hoverTip');
+    if (!key) { tip.classList.remove('show'); lastHoverKey = null; return; }
+    if (key !== lastHoverKey || key === 'rocket') { tip.innerHTML = tooltipHTML(key); lastHoverKey = key; }
+    tip.classList.add('show');
+    const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+    let left = x + 16, top = y + 16;
+    if (left + w + pad > innerWidth) left = x - w - 16;
+    if (top + h + pad > innerHeight) top = y - h - 16;
+    tip.style.left = Math.max(pad, left) + 'px';
+    tip.style.top = Math.max(pad, top) + 'px';
+  }
+  function tooltipHTML(key) {
+    if (key === 'rocket') return rocketTip();
+    if (key === 'Sun') return sunTip();
+    return planetTip(key);
+  }
+  function planetTip(name) {
+    const p = A.PLANETS.find(x => x.name === name);
+    const au = A.ELEMENTS[name].el[0];
+    const period = Math.pow(au, 1.5);
+    const periodStr = period < 1 ? (period * 12).toFixed(1) + ' months' : period.toFixed(1) + ' yr';
+    const day = p.dayH < 72 ? p.dayH.toFixed(1) + ' h' : (p.dayH / 24).toFixed(0) + ' days';
+    const dot = '#' + p.color.toString(16).padStart(6, '0');
+    return '<div class="tip-title"><span class="tip-dot" style="background:' + dot + '"></span>' + name + '</div>' +
+      '<div class="tip-rows">' +
+      '<span class="k">Diameter</span><span class="v">' + (2 * p.radiusKm).toLocaleString() + ' km</span>' +
+      '<span class="k">From Sun</span><span class="v">' + au.toFixed(2) + ' AU</span>' +
+      '<span class="k">Orbit</span><span class="v">' + periodStr + '</span>' +
+      '<span class="k">Day</span><span class="v">' + day + '</span>' +
+      '<span class="k">Moons</span><span class="v">' + p.moons + '</span>' +
+      '</div><div class="tip-blurb">' + p.blurb + '</div>';
+  }
+  function sunTip() {
+    const s = A.SUN_FACT;
+    return '<div class="tip-title"><span class="tip-dot" style="background:#ffd27a"></span>' + s.name + '</div>' +
+      '<div class="tip-rows"><span class="k">Diameter</span><span class="v">' + (2 * s.radiusKm).toLocaleString() + ' km</span>' +
+      '<span class="k">vs Earth</span><span class="v">~109× wider</span></div>' +
+      '<div class="tip-blurb">' + s.blurb + '</div>';
+  }
+  function rocketTip() {
+    const s = A.STARSHIP;
+    const rows = s.rows.map(r => '<span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span>').join('');
+    const sp = S.rocketSpeed();
+    const live = sp ? '<div class="tip-live">⚡ now: ' + sp.toFixed(1) + ' km/s · 1/' + Math.round(A.C_KMS / sp).toLocaleString() + ' of light speed</div>' : '';
+    return '<div class="tip-title">🚀 ' + s.name + '</div><div class="tip-rows">' + rows + '</div>' + live +
+      '<div class="tip-note">' + s.note + '</div>';
   }
 
   /* ---- launch windows table ------------------------------------------------ */

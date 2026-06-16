@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MarsTalk — talking across the void to Mars</title>
 <meta name="description" content="A live 3D view of the Earth–Mars gulf: how far it is right now, how long light and a rocket take to cross it, the Deep Space Network that carries the signal, and what it's like to text the red planet.">
-<link rel="stylesheet" href="marstalk.css?v=6">
+<link rel="stylesheet" href="marstalk.css?v=8">
 </head>
 <body>
 
@@ -156,11 +156,15 @@
   <!-- ===== Toast ===== -->
   <div id="toast"></div>
 
+  <!-- ===== Hover tooltip (planets / Sun / rocket) ===== -->
+  <div id="hoverTip"></div>
+
   <!-- ===== Rocket flight HUD (shown during a launch) ===== -->
   <div id="rocketHud" class="hidden">
     <span class="rkt-ic">🚀</span>
     <div class="rkt-info">
       <div class="rkt-line"><span id="rktProg">day 0 / 259 to Mars</span><span id="rktFactor">⏩ —</span></div>
+      <div class="rkt-speed-line" id="rktSpeed"></div>
       <div class="rkt-bar"><i id="rktBar"></i></div>
     </div>
   </div>
@@ -169,8 +173,8 @@
   <script src="lib/three.min.js"></script>
   <script src="lib/OrbitControls.js"></script>
   <!-- app -->
-  <script src="js/astro.js?v=6"></script>
-  <script src="js/scene.js?v=6"></script>
-  <script src="js/app.js?v=6"></script>
+  <script src="js/astro.js?v=8"></script>
+  <script src="js/scene.js?v=8"></script>
+  <script src="js/app.js?v=8"></script>
 </body>
 </html>
