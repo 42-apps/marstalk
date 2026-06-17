@@ -351,6 +351,22 @@
     const dvArr = vmag(vsub(lam.v2, planetVel('Mars', addDays(date, tof))));
     return { tof, dvDepart: dvDep * AUDAY_KMS, dvArrive: dvArr * AUDAY_KMS, dvTotal: (dvDep + dvArr) * AUDAY_KMS };
   }
+  // The fastest transfer reachable within a heliocentric Δv `budget` (km/s) when
+  // launching on `date`. Trip time FLUCTUATES with Earth–Mars alignment: short
+  // near a good window, long off-window (capped to the cheapest possible if even
+  // that exceeds the budget). This is why a given "speed" isn't a fixed number.
+  function bestTransfer(date, budget) {
+    let minDv = Infinity, minTof = 0, fastTof = 0, fastDv = 0;
+    for (let tof = 60; tof <= 480; tof += 10) {
+      const c = transferCost(date, tof);
+      if (!c || !isFinite(c.dvTotal)) continue;
+      if (c.dvTotal < minDv) { minDv = c.dvTotal; minTof = tof; }
+      if (!fastTof && c.dvTotal <= budget) { fastTof = tof; fastDv = c.dvTotal; }
+    }
+    return fastTof ? { tofDays: fastTof, dvTotal: fastDv, overBudget: false }
+                   : { tofDays: minTof, dvTotal: minDv, overBudget: true };
+  }
+
   function launchWindows(fromDate, count, years) {
     count = count || 8; years = years || 17;
     const step = 5, N = Math.round(years * 365.25 / step);
@@ -379,7 +395,7 @@
     PLANETS, DSN, ELEMENTS, SUN_FACT, MOON_FACT, STARSHIP,
     julianDate, heliocentric, distanceAU, orbitPath,
     addDays, snapshot, dataRate, leadAngle,
-    hohmann, transfer, transferCost, keplerProp, lambert, launchWindows,
+    hohmann, transfer, transferCost, bestTransfer, keplerProp, lambert, launchWindows,
     fmtDuration, fmtDays, fmtKM, fmtRate, fmtDate
   };
 })(typeof window !== 'undefined' ? window : this);

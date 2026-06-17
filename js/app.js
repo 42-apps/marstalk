@@ -21,7 +21,7 @@
     dir: 'E2M',           // message direction
     missions: [],         // rockets in flight (launch as many as you like)
     warp: 0,              // sim days advanced per real second while rockets fly
-    transferDays: null,   // chosen rocket trip time (null = min-energy Hohmann)
+    budget: 34,           // chosen heliocentric Δv budget (km/s); the trip time falls out of the date
     messages: []          // in-flight messages (real-time, concurrent, both directions)
   };
   let msgSeq = 0;
@@ -52,7 +52,9 @@
     $('vDist').textContent  = A.fmtKM(s.distKM) + ' · ' + s.distAU.toFixed(2) + ' AU';
     $('vLight').textContent = A.fmtDuration(s.lightSecOneWay);
     $('vRound').textContent = A.fmtDuration(s.lightSecRound);
-    $('vRocket').textContent = A.fmtDays(state.transferDays || s.rocketDays);
+    const bt = A.bestTransfer(date, state.budget);
+    $('vRocket').textContent = A.fmtDays(bt.tofDays);
+    S.setAimDays(bt.tofDays);
     $('vRate').textContent  = A.fmtRate(s.dataRateMbps);
 
     // timeline readout
@@ -174,7 +176,7 @@
 
   /* ---- rocket mission ------------------------------------------------------ */
   function setTransfer(val) {
-    state.transferDays = (val === 'auto') ? null : +val;
+    state.budget = +val;
     document.querySelectorAll('.xfer-sel').forEach(s => { s.value = val; });   // keep both selectors in sync
     if (windowsBuilt) renderWindows();
     setDate(state.date);
@@ -183,7 +185,7 @@
     stopPlay();
     state.warp = WARP_DPS;
     S.showAim(false);
-    const info = S.launchRocket(state.date, state.transferDays);   // chosen trip time (null = Hohmann)
+    const info = S.launchRocket(state.date, A.bestTransfer(state.date, state.budget).tofDays);
     state.missions.push({
       id: info.id,
       launchMs: info.launchDate.getTime(),
@@ -427,8 +429,8 @@
     if (!wins.length) { list.innerHTML = '<p class="win-foot">No windows found.</p>'; return; }
     // recompute trip time + Δv for the selected transfer speed at each window date
     const rows = wins.map(w => {
-      const c = A.transferCost(w.launch, state.transferDays) || { tof: w.tofDays, dvTotal: w.dvTotal };
-      return { launch: w.launch, arrive: A.addDays(w.launch, c.tof), tof: c.tof, dv: c.dvTotal };
+      const c = A.bestTransfer(w.launch, state.budget);
+      return { launch: w.launch, arrive: A.addDays(w.launch, c.tofDays), tof: c.tofDays, dv: c.dvTotal, over: c.overBudget };
     });
     const dvs = rows.map(r => r.dv);
     const minDv = Math.min.apply(null, dvs), maxDv = Math.max.apply(null, dvs);
@@ -441,7 +443,7 @@
       row.innerHTML =
         '<span class="wl-date">' + A.fmtDate(w.launch) + (best ? '<span class="win-best-tag">★ BEST</span>' : '') + '</span>' +
         '<span class="wl-arr">' + A.fmtDate(w.arrive) + '</span>' +
-        '<span class="wl-trip">' + Math.round(w.tof) + ' d</span>' +
+        '<span class="wl-trip">' + Math.round(w.tof) + ' d' + (w.over ? '*' : '') + '</span>' +
         '<span class="wl-dv"><i class="dvbar" style="width:' + Math.round(12 + frac * 48) + 'px;background:hsl(' + hue + ',72%,55%)"></i>' + w.dv.toFixed(1) + ' km/s</span>' +
         '<button class="wl-jump">Jump →</button>';
       const go = () => jumpToWindow(w);

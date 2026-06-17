@@ -20,6 +20,7 @@
   let sun, starfield;
   const bodies = {};               // name -> { mesh, label }
   let distLine, aimLine, ghostMars, ghostLabel;
+  let aimDays = 0;   // transfer time used for the "where Mars will be" aim line (0 = min-energy Hohmann)
   let dsnGroup, dsnDots = [], earthSpin = 0;
   let moon = null, moonLabel = null, moonAngle = 0;
   const rockets = new Map();   // id -> { transfer, curve, pts, group, flame, trail, plan, t }
@@ -349,8 +350,10 @@
     // light / distance line
     distLine.geometry.setFromPoints([e, m]);
 
-    // aim line + ghost Mars (where Mars will be when a rocket launched now arrives)
-    const future = toScene(A.heliocentric('Mars', A.addDays(date, A.hohmann(date).days)));
+    // aim line + ghost Mars (where Mars will be when a rocket launched now arrives,
+    // using the currently-selected transfer time)
+    const hd = aimDays > 0 ? aimDays : A.hohmann(date).days;
+    const future = toScene(A.heliocentric('Mars', A.addDays(date, hd)));
     aimLine.geometry.setFromPoints([e, future]);
     aimLine.computeLineDistances();
     ghostMars.position.copy(future);
@@ -541,6 +544,7 @@
     addPhoton, setPhoton, removePhoton,
     resetView, focusEarthMars, focusEarth,
     showAim(v){ aimLine.visible = v; ghostMars.visible = v; ghostLabel.visible = v; },
+    setAimDays(d){ aimDays = d || 0; },
     onDSNChange: null,
     onHover: null,
     rocketSpeed,
