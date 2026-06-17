@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MarsTalk — talking across the void to Mars</title>
 <meta name="description" content="A live 3D view of the Earth–Mars gulf: how far it is right now, how long light and a rocket take to cross it, the Deep Space Network that carries the signal, and what it's like to text the red planet.">
-<link rel="stylesheet" href="marstalk.css?v=15">
+<link rel="stylesheet" href="marstalk.css?v=16">
 </head>
 <body>
 
@@ -43,7 +43,7 @@
     </div>
     <div class="chip" id="chipRocket">
       <span class="chip-ic">🚀</span>
-      <div><span class="chip-val" id="vRocket">—</span><span class="chip-lbl">rocket (Hohmann transfer)</span></div>
+      <div><span class="chip-val" id="vRocket">—</span><span class="chip-lbl">rocket transfer time</span></div>
     </div>
     <div class="chip" id="chipRate">
       <span class="chip-ic">📶</span>
@@ -111,15 +111,14 @@
 
     <div class="tl-right">
       <button id="windowsBtn" title="Best dates to launch to Mars">🗓 Windows</button>
-      <div class="rkt-speed">
-        <label for="rocketDur">flight</label>
-        <select id="rocketDur" title="How long the ~9-month trip is squeezed into">
-          <option value="15">15 s</option>
-          <option value="30" selected>30 s</option>
-          <option value="60">60 s</option>
-          <option value="120">120 s</option>
+      <div class="xfer">
+        <label for="transferSel">transfer</label>
+        <select id="transferSel" class="xfer-sel" title="Trip time — faster trips need much more fuel (Δv)">
+          <option value="90">⚡ Fast · ~90 d</option>
+          <option value="120">Quick · ~120 d</option>
+          <option value="180">Nominal · ~180 d</option>
+          <option value="auto" selected>🐢 Hohmann · min-energy</option>
         </select>
-        <span id="rktFactorHint" title="speed-up vs real time">—</span>
       </div>
       <button id="launchBtn" title="Launch a rocket to Mars">🚀 Launch rocket</button>
     </div>
@@ -146,10 +145,20 @@
     <div class="modal-card win-card">
       <button class="modal-x" id="winX" aria-label="Close">✕</button>
       <h1>🗓 Mars launch windows</h1>
-      <p>The efficient moments to leave — when Earth and Mars line up for a low-energy Hohmann transfer (≈ every 26 months). Jump to one, then hit <b>🚀 Launch rocket</b>.</p>
+      <p>The efficient moments to leave — when Earth &amp; Mars line up (≈ every 26 months). Jump to one, then hit <b>🚀 Launch rocket</b>. Trip time &amp; Δv below reflect your chosen transfer speed:</p>
+      <div class="win-xfer">
+        <label for="transferSelM">Transfer</label>
+        <select id="transferSelM" class="xfer-sel">
+          <option value="90">⚡ Fast · ~90 days (high energy)</option>
+          <option value="120">Quick · ~120 days</option>
+          <option value="180">Nominal · ~180 days</option>
+          <option value="auto" selected>🐢 Hohmann · minimum energy (~260 d)</option>
+        </select>
+        <span class="win-xfer-note">faster = much more Δv (Starship needs orbital refuelling)</span>
+      </div>
       <div class="win-row win-head"><span>Launch</span><span>Arrives</span><span>Trip</span><span>Δv · efficiency</span><span></span></div>
       <div id="windowsList" class="win-list"></div>
-      <p class="win-foot">Δv = total heliocentric burn (lower = more efficient). Two-body estimate; real missions add launch-window margins.</p>
+      <p class="win-foot">Δv = total heliocentric burn for the selected transfer (lower = more efficient). The window <em>dates</em> are fixed by orbital alignment; the minimum-energy Hohmann path is slowest (~260 d) but cheapest, while ~90–180 d trips cost far more Δv. Two-body estimate.</p>
     </div>
   </div>
 
@@ -172,8 +181,8 @@
   <script src="lib/three.min.js"></script>
   <script src="lib/OrbitControls.js"></script>
   <!-- app -->
-  <script src="js/astro.js?v=15"></script>
-  <script src="js/scene.js?v=15"></script>
-  <script src="js/app.js?v=15"></script>
+  <script src="js/astro.js?v=16"></script>
+  <script src="js/scene.js?v=16"></script>
+  <script src="js/app.js?v=16"></script>
 </body>
 </html>

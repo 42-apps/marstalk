@@ -341,9 +341,9 @@
     const dt = 0.5;
     return vscale(vsub(heliocentric(name, addDays(date, dt)), heliocentric(name, addDays(date, -dt))), 1 / (2 * dt));
   }
-  function transferCost(date) {
+  function transferCost(date, tofDays) {
     const r1 = heliocentric('Earth', date);
-    const tof = hohmann(date).days;
+    const tof = (tofDays && tofDays > 0) ? tofDays : hohmann(date).days;
     const r2 = heliocentric('Mars', addDays(date, tof));
     const lam = lambert(r1, r2, tof);
     if (!lam || !isFinite(lam.v1.x) || !isFinite(lam.v2.x)) return null;
@@ -379,7 +379,7 @@
     PLANETS, DSN, ELEMENTS, SUN_FACT, MOON_FACT, STARSHIP,
     julianDate, heliocentric, distanceAU, orbitPath,
     addDays, snapshot, dataRate, leadAngle,
-    hohmann, transfer, keplerProp, lambert, launchWindows,
+    hohmann, transfer, transferCost, keplerProp, lambert, launchWindows,
     fmtDuration, fmtDays, fmtKM, fmtRate, fmtDate
   };
 })(typeof window !== 'undefined' ? window : this);

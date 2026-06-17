@@ -11,6 +11,7 @@
   const $ = (id) => document.getElementById(id);
   const DAY = 86400000;
   const TODAY = new Date();
+  const WARP_DPS = 260 / 30;   // sim days advanced per real second during a flight (~30 s for a Hohmann trip)
 
   const state = {
     date: new Date(TODAY.getTime()),
@@ -20,6 +21,7 @@
     dir: 'E2M',           // message direction
     missions: [],         // rockets in flight (launch as many as you like)
     warp: 0,              // sim days advanced per real second while rockets fly
+    transferDays: null,   // chosen rocket trip time (null = min-energy Hohmann)
     messages: []          // in-flight messages (real-time, concurrent, both directions)
   };
   let msgSeq = 0;
@@ -34,7 +36,6 @@
     onDSNChange(Math.max(0, S.activeDSN));   // apply initial highlight (first frame ran before wiring)
     paintTimelineHeatmap();
     wireControls();
-    updateFactorHint();
     setDate(state.date);
     $('introDate').textContent = A.fmtDate(state.date);
     requestAnimationFrame(loop);
@@ -51,7 +52,7 @@
     $('vDist').textContent  = A.fmtKM(s.distKM) + ' · ' + s.distAU.toFixed(2) + ' AU';
     $('vLight').textContent = A.fmtDuration(s.lightSecOneWay);
     $('vRound').textContent = A.fmtDuration(s.lightSecRound);
-    $('vRocket').textContent = A.fmtDays(s.rocketDays);
+    $('vRocket').textContent = A.fmtDays(state.transferDays || s.rocketDays);
     $('vRate').textContent  = A.fmtRate(s.dataRateMbps);
 
     // timeline readout
@@ -70,7 +71,6 @@
     state._rate = s.dataRateMbps;
     updateDSNRate();
     $('msgHint').textContent = A.fmtDuration(s.lightSecOneWay) + ' each way · real time';
-    updateFactorHint();
   }
 
   function relLabel(date) {
@@ -119,7 +119,7 @@
     $('todayBtn').addEventListener('click', () => { stopPlay(); setDate(new Date(TODAY.getTime())); toast('Back to today'); });
     $('playBtn').addEventListener('click', togglePlay);
     $('speedSel').addEventListener('change', (e) => { state.speed = +e.target.value; });
-    $('rocketDur').addEventListener('change', updateFactorHint);
+    document.querySelectorAll('.xfer-sel').forEach(sel => sel.addEventListener('change', (e) => setTransfer(e.target.value)));
     $('launchBtn').addEventListener('click', launchRocket);
     $('windowsBtn').addEventListener('click', openWindows);
     $('winX').addEventListener('click', () => $('windowsModal').classList.add('gone'));
@@ -173,12 +173,17 @@
   }
 
   /* ---- rocket mission ------------------------------------------------------ */
+  function setTransfer(val) {
+    state.transferDays = (val === 'auto') ? null : +val;
+    document.querySelectorAll('.xfer-sel').forEach(s => { s.value = val; });   // keep both selectors in sync
+    if (windowsBuilt) renderWindows();
+    setDate(state.date);
+  }
   function launchRocket() {
     stopPlay();
-    const durSec = +($('rocketDur').value) || 30;
-    state.warp = 260 / durSec;            // a Hohmann-length trip plays in ~durSec; faster trips finish sooner
+    state.warp = WARP_DPS;
     S.showAim(false);
-    const info = S.launchRocket(state.date);
+    const info = S.launchRocket(state.date, state.transferDays);   // chosen trip time (null = Hohmann)
     state.missions.push({
       id: info.id,
       launchMs: info.launchDate.getTime(),
@@ -215,11 +220,6 @@
   function fmtFactor(n) {
     return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M×'
                     : Math.round(n / 1000) + 'k×';
-  }
-  function updateFactorHint() {
-    const durSec = +($('rocketDur').value) || 30;
-    const tof = A.hohmann(state.date).days;
-    $('rktFactorHint').textContent = '≈' + fmtFactor((tof * 86400) / durSec);
   }
 
   /* ---- messaging ----------------------------------------------------------- */
@@ -425,19 +425,24 @@
     const wins = A.launchWindows(TODAY, 8, 17);
     const list = $('windowsList'); list.innerHTML = '';
     if (!wins.length) { list.innerHTML = '<p class="win-foot">No windows found.</p>'; return; }
-    const dvs = wins.map(w => w.dvTotal);
+    // recompute trip time + Δv for the selected transfer speed at each window date
+    const rows = wins.map(w => {
+      const c = A.transferCost(w.launch, state.transferDays) || { tof: w.tofDays, dvTotal: w.dvTotal };
+      return { launch: w.launch, arrive: A.addDays(w.launch, c.tof), tof: c.tof, dv: c.dvTotal };
+    });
+    const dvs = rows.map(r => r.dv);
     const minDv = Math.min.apply(null, dvs), maxDv = Math.max.apply(null, dvs);
-    wins.forEach(w => {
-      const best = w.dvTotal === minDv;
-      const frac = (w.dvTotal - minDv) / Math.max(0.01, maxDv - minDv);   // 0 best .. 1 worst
-      const hue = Math.round(140 - frac * 130);                            // green → red
+    rows.forEach(w => {
+      const best = w.dv === minDv;
+      const frac = (w.dv - minDv) / Math.max(0.01, maxDv - minDv);   // 0 best .. 1 worst
+      const hue = Math.round(140 - frac * 130);                       // green → red
       const row = document.createElement('div');
       row.className = 'win-row win-item' + (best ? ' best' : '');
       row.innerHTML =
         '<span class="wl-date">' + A.fmtDate(w.launch) + (best ? '<span class="win-best-tag">★ BEST</span>' : '') + '</span>' +
         '<span class="wl-arr">' + A.fmtDate(w.arrive) + '</span>' +
-        '<span class="wl-trip">' + Math.round(w.tofDays) + ' d</span>' +
-        '<span class="wl-dv"><i class="dvbar" style="width:' + Math.round(12 + frac * 48) + 'px;background:hsl(' + hue + ',72%,55%)"></i>' + w.dvTotal.toFixed(1) + ' km/s</span>' +
+        '<span class="wl-trip">' + Math.round(w.tof) + ' d</span>' +
+        '<span class="wl-dv"><i class="dvbar" style="width:' + Math.round(12 + frac * 48) + 'px;background:hsl(' + hue + ',72%,55%)"></i>' + w.dv.toFixed(1) + ' km/s</span>' +
         '<button class="wl-jump">Jump →</button>';
       const go = () => jumpToWindow(w);
       row.querySelector('.wl-jump').addEventListener('click', (e) => { e.stopPropagation(); go(); });
@@ -449,7 +454,7 @@
     stopPlay();
     setDate(new Date(w.launch.getTime()));
     $('windowsModal').classList.add('gone');
-    toast('🗓 Jumped to ' + A.fmtDate(w.launch) + ' — optimal Mars window (Δv ' + w.dvTotal.toFixed(1) + ' km/s). Now hit 🚀 Launch rocket!');
+    toast('🗓 Jumped to ' + A.fmtDate(w.launch) + ' — Mars window, ' + Math.round(w.tof) + '-day transfer (Δv ' + w.dv.toFixed(1) + ' km/s). Now hit 🚀 Launch rocket!');
   }
 
   /* ---- toast --------------------------------------------------------------- */

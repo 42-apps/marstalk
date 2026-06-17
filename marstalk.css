@@ -179,10 +179,11 @@ body.dir-m2e #sendBtn{background:linear-gradient(135deg,var(--mars),#b54327); bo
 #toast.show{opacity:1; transform:translate(-50%,0)}
 
 /* ---- Rocket flight control + HUD ---- */
-.rkt-speed{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--mute)}
-.rkt-speed select{background:rgba(255,255,255,.07); color:var(--ink); border:1px solid var(--glass-brd); border-radius:8px; padding:6px 7px; font-size:11.5px; font-family:inherit}
-.rkt-speed select:disabled{opacity:.5}
-#rktFactorHint{color:var(--rocket); font-weight:650; font-variant-numeric:tabular-nums; min-width:44px}
+.xfer{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--mute)}
+.xfer select,.win-xfer select{background:rgba(255,255,255,.07); color:var(--ink); border:1px solid var(--glass-brd); border-radius:8px; padding:6px 8px; font-size:11.5px; font-family:inherit}
+.win-xfer{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:4px 0 12px}
+.win-xfer label{font-size:12px; color:var(--mute)}
+.win-xfer-note{font-size:11px; color:var(--faint)}
 #rocketHud{position:fixed; z-index:30; left:50%; bottom:118px; transform:translateX(-50%);
   display:flex; align-items:center; gap:13px; background:var(--glass); border:1px solid rgba(140,255,158,.4);
   border-radius:13px; padding:11px 18px; box-shadow:0 8px 30px rgba(0,0,0,.5), 0 0 22px rgba(140,255,158,.12);
