@@ -317,9 +317,9 @@
   // per-date Hohmann; Lambert-solved to Mars' true position at arrival, so the
   // rocket genuinely intercepts. posAt(frac) gives the heliocentric position
   // (AU) at fraction frac of the flight by Kepler-propagating the solved orbit.
-  function transfer(date) {
+  function transfer(date, tofDays) {
     const r1 = heliocentric('Earth', date);
-    const tof = hohmann(date).days;
+    const tof = (tofDays && tofDays > 0) ? tofDays : hohmann(date).days;  // chosen trip time, else min-energy Hohmann
     const r2 = heliocentric('Mars', addDays(date, tof));
     const lam = lambert(r1, r2, tof);
     if (!lam || !isFinite(lam.v1.x) || !isFinite(lam.v1.y) || !isFinite(lam.v1.z)) return null;

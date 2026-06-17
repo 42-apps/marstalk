@@ -195,6 +195,13 @@ body.dir-m2e #sendBtn{background:linear-gradient(135deg,var(--mars),#b54327); bo
 #rktFactor{color:var(--rocket); font-weight:700; font-variant-numeric:tabular-nums}
 .rkt-bar{height:4px; border-radius:2px; background:rgba(255,255,255,.13); overflow:hidden}
 .rkt-bar>i{display:block; height:100%; width:0; background:var(--rocket); box-shadow:0 0 8px var(--rocket); transition:width .1s linear}
+.rkt-info{max-height:40vh; overflow-y:auto}
+.rkt-head{font-size:12.5px; font-weight:650; color:var(--ink); margin-bottom:6px}
+.rkt-row{display:grid; grid-template-columns:1fr auto; gap:1px 10px; align-items:baseline; margin-top:7px}
+.rkt-day{font-size:11.5px; color:var(--ink); font-variant-numeric:tabular-nums}
+.rkt-sp{font-size:10.5px; color:var(--light); font-variant-numeric:tabular-nums; text-align:right}
+.rkt-row .rkt-bar{grid-column:1 / -1; margin-top:3px}
+.rkt-more{font-size:10.5px; color:var(--mute); margin-top:6px}
 
 /* ---- Launch windows table ---- */
 #windowsBtn{background:rgba(255,255,255,.07); border:1px solid var(--glass-brd); border-radius:9px; padding:8px 12px; font-size:12.5px; font-weight:600; color:var(--earth-lt); transition:.18s}

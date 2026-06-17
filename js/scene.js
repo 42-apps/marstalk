@@ -22,8 +22,8 @@
   let distLine, aimLine, ghostMars, ghostLabel;
   let dsnGroup, dsnDots = [], earthSpin = 0;
   let moon = null, moonLabel = null, moonAngle = 0;
-  let rocket, rocketTrail, rocketPlan, rocketCurve = null, rocketActive = false, rocketT = 0;
-  let rocketTransfer = null, rocketArrDate = null, rocketTofDays = 0, rocketFlame = null;
+  const rockets = new Map();   // id -> { transfer, curve, pts, group, flame, trail, plan, t }
+  let rocketSeq = 0;
   const photons = new Map();   // id -> { dir, sprite, trail, sx, sy }
   const ENV_SIZE = 6;          // world-size of the flying envelopes
   let curDate = new Date();
@@ -115,7 +115,6 @@
     buildOrbits();
     buildLines();
     buildDSN();
-    buildRocket();
 
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerleave', () => { if (Scene.onHover) Scene.onHover(null); renderer.domElement.style.cursor = 'default'; });
@@ -250,37 +249,22 @@
     });
   }
 
-  // A Starship-style rocket: stainless body + nosecone + fore/aft flaps + exhaust.
-  // Modelled with the nose toward +Y; setRocket() orients it along the velocity.
-  function buildRocket() {
-    rocket = new THREE.Group();
-    rocket.userData.hoverKey = 'rocket';
+  // Build ONE Starship (stainless body + nosecone + fore/aft flaps + exhaust),
+  // nose toward +Y. Returns the group + its flame mesh. Many can exist at once.
+  function makeStarship() {
+    const g = new THREE.Group();
     const hull = new THREE.MeshStandardMaterial({ color: 0xdde3ec, metalness: 0.62, roughness: 0.33, emissive: 0x3a4150, emissiveIntensity: 0.5 });
     const fin  = new THREE.MeshStandardMaterial({ color: 0x99a2b1, metalness: 0.45, roughness: 0.5 });
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2.8, 24), hull);
-    rocket.add(body);
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.5, 24), hull);
-    nose.position.y = 2.15; rocket.add(nose);
-    const mkFlap = (w, h, x, y, rz) => {
-      const f = new THREE.Mesh(new THREE.BoxGeometry(0.1, h, w), fin);
-      f.position.set(x, y, 0); f.rotation.z = rz; rocket.add(f);
-    };
-    mkFlap(0.85, 1.05,  0.55, -1.0,  0.22); mkFlap(0.85, 1.05, -0.55, -1.0, -0.22); // aft flaps
-    mkFlap(0.55, 0.70,  0.50,  1.25, 0.16); mkFlap(0.55, 0.70, -0.50,  1.25, -0.16); // fwd flaps
-    rocketFlame = new THREE.Mesh(new THREE.ConeGeometry(0.38, 1.7, 18),
-      new THREE.MeshBasicMaterial({ color: 0xffb24a, transparent: true, opacity: 0.92 }));
-    rocketFlame.position.y = -2.15; rocketFlame.rotation.x = Math.PI; rocket.add(rocketFlame);
-    const g = radialSprite(0xffd27a, 4.6, 0.9); g.position.y = -2.0; rocket.add(g);
-    rocket.scale.setScalar(1.6);
-    rocket.visible = false;
-    scene.add(rocket);
-
-    rocketTrail = new THREE.Line(new THREE.BufferGeometry(),
-      new THREE.LineBasicMaterial({ color: COL.rocket, transparent: true, opacity: 0.95 }));
-    scene.add(rocketTrail);
-    rocketPlan = new THREE.Line(new THREE.BufferGeometry(),
-      new THREE.LineBasicMaterial({ color: COL.rocket, transparent: true, opacity: 0.22 }));
-    scene.add(rocketPlan);
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 2.8, 24), hull));
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.5, 24), hull); nose.position.y = 2.15; g.add(nose);
+    const mkFlap = (w, h, x, y, rz) => { const f = new THREE.Mesh(new THREE.BoxGeometry(0.1, h, w), fin); f.position.set(x, y, 0); f.rotation.z = rz; g.add(f); };
+    mkFlap(0.85, 1.05, 0.55, -1.0, 0.22); mkFlap(0.85, 1.05, -0.55, -1.0, -0.22);   // aft flaps
+    mkFlap(0.55, 0.70, 0.50, 1.25, 0.16); mkFlap(0.55, 0.70, -0.50, 1.25, -0.16);   // fwd flaps
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.38, 1.7, 18), new THREE.MeshBasicMaterial({ color: 0xffb24a, transparent: true, opacity: 0.92 }));
+    flame.position.y = -2.15; flame.rotation.x = Math.PI; g.add(flame);
+    const glow = radialSprite(0xffd27a, 4.6, 0.9); glow.position.y = -2.0; g.add(glow);
+    g.scale.setScalar(1.6);
+    return { group: g, flame };
   }
 
   // A clear envelope on a soft glow halo, drawn once per direction and cached.
@@ -397,7 +381,7 @@
       p.sprite.scale.set(s, s, 1);
       p.sprite.material.rotation = 0.16 * Math.sin(t * 2.4 + (p.sx + 0.5) * 6);
     });
-    if (rocketFlame && rocket.visible) rocketFlame.scale.set(1, 0.75 + 0.35 * Math.abs(Math.sin(t * 22)), 1);
+    rockets.forEach(r => r.flame.scale.set(1, 0.75 + 0.35 * Math.abs(Math.sin(t * 22)), 1));
 
     renderer.render(scene, camera);
   }
@@ -424,18 +408,17 @@
   }
 
   /* ---- rocket mission ------------------------------------------------------ */
-  // Build the real two-body transfer leaving Earth at `date` (Lambert + Kepler
-  // propagation in Astro). Falls back to a simple arc only if Lambert fails.
-  function beginRocket(date) {
-    const tr = A.transfer(date);
-    let pts, tof, arrDate;
+  // Launch a rocket on the real two-body transfer (Lambert + Kepler) leaving
+  // Earth at `date` for a `tofDays` trip (default min-energy Hohmann). Many can
+  // be in flight at once. Returns its id + arrival.
+  function launchRocket(date, tofDays) {
+    const tr = A.transfer(date, tofDays);
+    let pts, tof, arrDate, curve = null;
     if (tr) {
       tof = tr.tofDays; arrDate = A.addDays(date, tof);
-      rocketTransfer = tr;
       pts = [];
       for (let i = 0; i <= 200; i++) pts.push(toScene(tr.posAt(i / 200)));
     } else {
-      rocketTransfer = null;
       tof = A.hohmann(date).days; arrDate = A.addDays(date, tof);
       const eH = A.heliocentric('Earth', date), mH = A.heliocentric('Mars', arrDate);
       const rE = Math.hypot(eH.x, eH.y), rM = Math.hypot(mH.x, mH.y);
@@ -443,43 +426,50 @@
       while (dth <= 0) dth += 2 * Math.PI;
       pts = [];
       for (let i = 0; i <= 160; i++) { const s = i/160; pts.push(toScene({ x: (rE+(rM-rE)*s)*Math.cos(thE+dth*s), y: (rE+(rM-rE)*s)*Math.sin(thE+dth*s), z: eH.z+(mH.z-eH.z)*s })); }
+      curve = new THREE.CatmullRomCurve3(pts);
     }
-    rocketTofDays = tof; rocketArrDate = arrDate;
-    rocketCurve = new THREE.CatmullRomCurve3(pts);
-    rocketPlan.geometry.setFromPoints(pts);
-    rocketTrail.geometry.setFromPoints([pts[0]]);
-    rocketActive = true; rocketT = 0;
-    rocket.visible = true;
-    rocket.position.copy(pts[0]);
-    return { launchDate: new Date(date.getTime()), arrivalDate: arrDate, tofDays: tof };
+    const id = ++rocketSeq;
+    const ship = makeStarship();
+    ship.group.userData.hoverKey = 'rocket:' + id;
+    ship.group.position.copy(pts[0]);
+    scene.add(ship.group);
+    const trail = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: COL.rocket, transparent: true, opacity: 0.95 }));
+    trail.geometry.setFromPoints([pts[0]]);
+    const plan = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: COL.rocket, transparent: true, opacity: 0.22 }));
+    plan.geometry.setFromPoints(pts);
+    scene.add(trail); scene.add(plan);
+    rockets.set(id, { id, transfer: tr, curve, pts, group: ship.group, flame: ship.flame, trail, plan, t: 0 });
+    return { id, launchDate: new Date(date.getTime()), arrivalDate: arrDate, tofDays: tof };
   }
 
-  // t is the fraction of the flight TIME. With the real transfer we sample by
-  // Kepler propagation, so the rocket genuinely speeds up near perihelion and
-  // slows near aphelion (true orbital motion), not constant arc-length.
-  function setRocket(t) {
-    if (!rocketActive) return;
-    rocketT = Math.max(0, Math.min(1, t));
-    const at = (fr) => rocketTransfer ? toScene(rocketTransfer.posAt(fr)) : rocketCurve.getPoint(fr);
-    const p = at(rocketT);
-    rocket.position.copy(p);
-    const ahead = at(Math.min(1, rocketT + 0.004));
-    if (ahead.distanceToSquared(p) > 1e-6) { rocket.lookAt(ahead); rocket.rotateX(Math.PI / 2); }
-    const seg = Math.max(2, Math.floor(rocketT * 200) + 1);
+  // Place rocket `id` at fraction `t` of its flight TIME (Kepler-sampled, so it
+  // speeds up near perihelion and slows near aphelion), growing its trail.
+  function setRocketProgress(id, t) {
+    const r = rockets.get(id); if (!r) return;
+    r.t = Math.max(0, Math.min(1, t));
+    const at = (fr) => r.transfer ? toScene(r.transfer.posAt(fr)) : r.curve.getPoint(fr);
+    const p = at(r.t);
+    r.group.position.copy(p);
+    const ahead = at(Math.min(1, r.t + 0.004));
+    if (ahead.distanceToSquared(p) > 1e-6) { r.group.lookAt(ahead); r.group.rotateX(Math.PI / 2); }
+    const seg = Math.max(2, Math.floor(r.t * 200) + 1);
     const tp = [];
     for (let i = 0; i < seg; i++) tp.push(at(i / 200));
     tp.push(p);
-    rocketTrail.geometry.setFromPoints(tp);
+    r.trail.geometry.setFromPoints(tp);
   }
 
-  function endRocket(keepTrail) {
-    rocketActive = false;
-    if (!keepTrail) {
-      rocket.visible = false;
-      rocketTrail.geometry.setFromPoints([]);
-      rocketPlan.geometry.setFromPoints([]);
-      rocketCurve = null;
-    }
+  function endRocketFlight(id) { setRocketProgress(id, 1); }   // park it at Mars
+  function removeRocket(id) {
+    const r = rockets.get(id); if (!r) return;
+    scene.remove(r.group); scene.remove(r.trail); scene.remove(r.plan);
+    r.trail.geometry.dispose(); r.trail.material.dispose();
+    r.plan.geometry.dispose(); r.plan.material.dispose();
+    rockets.delete(id);
+  }
+  function rocketSpeed(id) {
+    const r = rockets.get(id);
+    return r && r.transfer ? r.transfer.speedAt(r.t) : null;
   }
 
   /* ---- camera helpers ------------------------------------------------------ */
@@ -530,7 +520,7 @@
     const targets = A.PLANETS.map(p => bodies[p.name].mesh);
     targets.push(sun);
     if (moon) targets.push(moon);
-    if (rocket.visible) targets.push(rocket);
+    rockets.forEach(r => targets.push(r.group));
     const hits = raycaster.intersectObjects(targets, true);
     let key = null;
     if (hits.length) { let o = hits[0].object; while (o && !(o.userData && o.userData.hoverKey)) o = o.parent; if (o) key = o.userData.hoverKey; }
@@ -547,13 +537,13 @@
   /* ---- public API ---------------------------------------------------------- */
   const Scene = {
     init, update,
-    beginRocket, setRocket, endRocket,
+    launchRocket, setRocketProgress, endRocketFlight, removeRocket,
     addPhoton, setPhoton, removePhoton,
     resetView, focusEarthMars, focusEarth,
     showAim(v){ aimLine.visible = v; ghostMars.visible = v; ghostLabel.visible = v; },
     onDSNChange: null,
     onHover: null,
-    rocketSpeed: () => rocketTransfer ? rocketTransfer.speedAt(rocketT) : null,
+    rocketSpeed,
     get activeDSN(){ return _activeDSN; },
     earthPos(){ return bodies.Earth.mesh.position.clone(); },
     marsPos(){ return bodies.Mars.mesh.position.clone(); }

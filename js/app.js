@@ -18,7 +18,8 @@
     speed: 30,            // days advanced per real second
     playDir: 1,           // ping-pong direction
     dir: 'E2M',           // message direction
-    mission: null,        // active rocket flight
+    missions: [],         // rockets in flight (launch as many as you like)
+    warp: 0,              // sim days advanced per real second while rockets fly
     messages: []          // in-flight messages (real-time, concurrent, both directions)
   };
   let msgSeq = 0;
@@ -85,13 +86,16 @@
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
 
-    if (state.mission) {
-      const prog = Math.min(1, (now - state.mission.t0) / state.mission.durMs);
-      const dms = state.mission.launchMs + (state.mission.arriveMs - state.mission.launchMs) * prog;
-      setDate(new Date(dms));
-      S.setRocket(prog);
-      updateRocketHud(prog);
-      if (prog >= 1) endMission();
+    if (state.missions.length) {
+      setDate(new Date(state.date.getTime() + state.warp * DAY * dt));   // fast-forward shared clock
+      for (let i = state.missions.length - 1; i >= 0; i--) {
+        const m = state.missions[i];
+        const prog = (state.date.getTime() - m.launchMs) / (m.arriveMs - m.launchMs);
+        S.setRocketProgress(m.id, Math.min(1, prog));
+        if (prog >= 1) { arriveMission(m); state.missions.splice(i, 1); }
+      }
+      updateRocketHud();
+      if (state.missions.length === 0) endAllFlights();
     } else if (state.playing) {
       let off = (state.date.getTime() - TODAY.getTime()) / DAY;
       off += state.speed * state.playDir * dt;
@@ -100,7 +104,7 @@
       setDate(new Date(TODAY.getTime() + off * DAY));
     }
 
-    if (state.messages.length) { if (state.mission) flushMessages(); else tickMessages(now); }
+    if (state.messages.length) { if (state.missions.length) flushMessages(); else tickMessages(now); }
 
     requestAnimationFrame(loop);
   }
@@ -108,7 +112,7 @@
   /* ---- controls wiring ----------------------------------------------------- */
   function wireControls() {
     $('timeSlider').addEventListener('input', (e) => {
-      if (state.mission) return;
+      if (state.missions.length) return;
       stopPlay();
       setDate(new Date(TODAY.getTime() + (+e.target.value) * DAY));
     });
@@ -157,7 +161,7 @@
     state.playing ? stopPlay() : startPlay();
   }
   function startPlay() {
-    if (state.mission) return;
+    if (state.missions.length) return;
     state.playing = true;
     $('playBtn').textContent = '❚❚';
     $('playBtn').classList.add('playing');
@@ -170,50 +174,43 @@
 
   /* ---- rocket mission ------------------------------------------------------ */
   function launchRocket() {
-    if (state.mission) return;
     stopPlay();
-    S.showAim(false);
     const durSec = +($('rocketDur').value) || 30;
-    const info = S.beginRocket(state.date);
-    const factor = (info.tofDays * 86400) / durSec;       // ×real-time
-    state.mission = {
-      t0: performance.now(),
-      durMs: durSec * 1000,
+    state.warp = 260 / durSec;            // a Hohmann-length trip plays in ~durSec; faster trips finish sooner
+    S.showAim(false);
+    const info = S.launchRocket(state.date);
+    state.missions.push({
+      id: info.id,
       launchMs: info.launchDate.getTime(),
       arriveMs: info.arrivalDate.getTime(),
       tofN: Math.round(info.tofDays)
-    };
-    flushMessages();                                       // time is about to skip months
-    $('launchBtn').disabled = true;
-    $('launchBtn').textContent = '🚀 In flight…';
-    $('rocketDur').disabled = true;
-    $('rktFactor').textContent = '⏩ ' + fmtFactor(factor) + ' real time';
+    });
+    flushMessages();                      // time is about to skip months → deliver any in-flight messages
     $('rocketHud').classList.remove('hidden');
-    updateRocketHud(0);
-    toast('🚀 Launched at ' + fmtFactor(factor) + ' real time — a ' + A.fmtDays(info.tofDays) +
-          ' transfer in ' + durSec + ' s. Watch it aim ahead of Mars.');
+    updateRocketHud();
+    toast('🚀 Launched — ' + A.fmtDays(info.tofDays) + ' transfer. Launch another whenever you like.');
   }
-  function endMission() {
-    const tof = state.mission ? state.mission.tofN : A.HOHMANN_DAYS;
-    state.mission = null;
-    S.setRocket(1);
-    S.endRocket(true);          // keep the trajectory drawn
+  function arriveMission(m) {
+    S.endRocketFlight(m.id);                          // park it at Mars
+    setTimeout(() => S.removeRocket(m.id), 2600);     // linger briefly, then clear
+    toast('🛬 A rocket reached Mars after ' + m.tofN + ' days.');
+  }
+  function endAllFlights() {
+    state.warp = 0;
     S.showAim(true);
-    updateRocketHud(1);
-    setTimeout(() => $('rocketHud').classList.add('hidden'), 2600);
-    $('launchBtn').disabled = false;
-    $('launchBtn').textContent = '🚀 Launch rocket';
-    $('rocketDur').disabled = false;
-    toast('🛬 Arrival! The rocket met Mars after ' + A.fmtDays(tof) + ' — see how far Mars travelled.');
+    setTimeout(() => { if (!state.missions.length) $('rocketHud').classList.add('hidden'); }, 2600);
   }
-  function updateRocketHud(prog) {
-    const N = state.mission ? state.mission.tofN : A.HOHMANN_DAYS;
-    $('rktProg').textContent = 'day ' + Math.round(N * prog) + ' / ' + N + ' to Mars';
-    $('rktBar').style.width = (prog * 100) + '%';
-    const sp = S.rocketSpeed();
-    $('rktSpeed').textContent = sp
-      ? '🚀 ' + sp.toFixed(1) + ' km/s · 1/' + Math.round(A.C_KMS / sp).toLocaleString() + ' of light speed'
-      : '';
+  function updateRocketHud() {
+    const n = state.missions.length;
+    if (!n) return;
+    $('rktHead').textContent = n + ' rocket' + (n > 1 ? 's' : '') + ' in flight · ⏩ ' + fmtFactor(state.warp * 86400) + ' real time';
+    $('rktList').innerHTML = state.missions.slice(0, 6).map(m => {
+      const prog = Math.max(0, Math.min(1, (state.date.getTime() - m.launchMs) / (m.arriveMs - m.launchMs)));
+      const sp = S.rocketSpeed(m.id);
+      return '<div class="rkt-row"><span class="rkt-day">day ' + Math.round(m.tofN * prog) + ' / ' + m.tofN + '</span>' +
+        '<span class="rkt-sp">' + (sp ? sp.toFixed(1) + ' km/s · 1/' + Math.round(A.C_KMS / sp).toLocaleString() + ' c' : '') + '</span>' +
+        '<div class="rkt-bar"><i style="width:' + (prog * 100) + '%"></i></div></div>';
+    }).join('') + (n > 6 ? '<div class="rkt-more">+' + (n - 6) + ' more</div>' : '');
   }
   function fmtFactor(n) {
     return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M×'
