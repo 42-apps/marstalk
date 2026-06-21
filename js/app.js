@@ -11,7 +11,6 @@
   const $ = (id) => document.getElementById(id);
   const DAY = 86400000;
   const TODAY = new Date();
-  const WARP_DPS = 260 / 30;   // sim days advanced per real second during a flight (~30 s for a Hohmann trip)
 
   const state = {
     date: new Date(TODAY.getTime()),
@@ -20,7 +19,6 @@
     playDir: 1,           // ping-pong direction
     dir: 'E2M',           // message direction
     missions: [],         // rockets in flight (launch as many as you like)
-    warp: 0,              // sim days advanced per real second while rockets fly
     budget: 34,           // chosen heliocentric Δv budget (km/s); the trip time falls out of the date
     messages: []          // in-flight messages (real-time, concurrent, both directions)
   };
@@ -89,7 +87,7 @@
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
 
     if (state.missions.length) {
-      setDate(new Date(state.date.getTime() + state.warp * DAY * dt));   // fast-forward shared clock
+      setDate(new Date(state.date.getTime() + state.speed * DAY * dt));   // fast-forward at the chosen play speed
       for (let i = state.missions.length - 1; i >= 0; i--) {
         const m = state.missions[i];
         const prog = (state.date.getTime() - m.launchMs) / (m.arriveMs - m.launchMs);
@@ -183,7 +181,6 @@
   }
   function launchRocket() {
     stopPlay();
-    state.warp = WARP_DPS;
     S.showAim(false);
     const info = S.launchRocket(state.date, A.bestTransfer(state.date, state.budget).tofDays);
     state.missions.push({
@@ -203,14 +200,13 @@
     toast('🛬 A rocket reached Mars after ' + m.tofN + ' days.');
   }
   function endAllFlights() {
-    state.warp = 0;
     S.showAim(true);
     setTimeout(() => { if (!state.missions.length) $('rocketHud').classList.add('hidden'); }, 2600);
   }
   function updateRocketHud() {
     const n = state.missions.length;
     if (!n) return;
-    $('rktHead').textContent = n + ' rocket' + (n > 1 ? 's' : '') + ' in flight · ⏩ ' + fmtFactor(state.warp * 86400) + ' real time';
+    $('rktHead').textContent = n + ' rocket' + (n > 1 ? 's' : '') + ' in flight · ⏩ ' + fmtFactor(state.speed * 86400) + ' real time';
     $('rktList').innerHTML = state.missions.slice(0, 6).map(m => {
       const prog = Math.max(0, Math.min(1, (state.date.getTime() - m.launchMs) / (m.arriveMs - m.launchMs)));
       const sp = S.rocketSpeed(m.id);

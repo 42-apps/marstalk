@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MarsTalk",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "A live 3D view of the Earth–Mars gulf — real distance, light-lag, rocket transfer time, the Deep Space Network, and texting the red planet across the void.",
   "homepage_url": "https://42-apps.github.io/marstalk/",
   "icons": {
